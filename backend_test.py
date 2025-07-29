@@ -405,7 +405,10 @@ class TelegramBotAPITester:
 
 if __name__ == "__main__":
     tester = TelegramBotAPITester()
-    summary = tester.run_all_tests()
-    
-    # Exit with appropriate code
-    exit(0 if summary['failed'] == 0 else 1)
+    try:
+        summary = tester.run_all_tests()
+        # Exit with appropriate code
+        exit(0 if summary and summary['failed'] == 0 else 1)
+    except Exception as e:
+        print(f"❌ Test execution failed: {e}")
+        exit(1)
