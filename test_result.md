@@ -384,6 +384,18 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Comprehensive error handling for forwarding system. Invalid forwarding destination creation returns HTTP 422, non-existent destination access returns HTTP 404, duplicate destination creation properly prevented with HTTP 400, testing non-existent destinations returns HTTP 404. All error scenarios handled correctly."
 
+  - task: "Subscription Management System - Organization Plan Management"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Complete subscription management system working perfectly with 100% success rate (18/18 tests passed). GET /api/organizations/current returns organization with plan field, PUT /api/organizations/current supports plan updates (free, pro, enterprise). Plan validation working correctly - invalid plans rejected with HTTP 422. Authentication required (HTTP 403 for unauthenticated requests). Owner permissions enforced. Data integrity maintained through plan updates. Complete workflow tested: free→pro→enterprise→free transitions. Backend fully supports frontend subscription management page."
+
 frontend:
   - task: "Subscription Management Page - Plan Management UI"
     implemented: true
