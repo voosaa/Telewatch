@@ -23,7 +23,11 @@ import {
   Building,
   UserCog,
   LogOut,
-  User
+  User,
+  CreditCard,
+  Crown,
+  Check,
+  X
 } from "lucide-react";
 import "./App.css";
 
