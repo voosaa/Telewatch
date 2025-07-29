@@ -192,8 +192,11 @@ class TelegramBotAPITester:
         """Test Watchlist Management with forwarding destinations field"""
         
         # First create a forwarding destination
+        import random
+        unique_id = f"-100{random.randint(1000000000, 9999999999)}"
+        
         destination_data = {
-            "destination_id": "-1001111111111",
+            "destination_id": unique_id,
             "destination_name": "Test Forwarding Channel",
             "destination_type": "channel",
             "is_active": True
