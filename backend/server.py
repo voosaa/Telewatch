@@ -605,6 +605,8 @@ async def handle_bot_command(message) -> None:
         username = message.from_user.username or ""
         command_text = message.text
         
+        logger.info(f"Processing command '{command_text}' from @{username} (ID: {user_id}) in chat {chat_id}")
+        
         # Log the command
         bot_command = BotCommand(
             command=command_text,
@@ -614,143 +616,45 @@ async def handle_bot_command(message) -> None:
         )
         await db.bot_commands.insert_one(bot_command.dict())
         
-        # Handle different commands
-        if command_text == '/start':
+        # Handle different commands - now primarily /start to show the main menu
+        if command_text in ['/start', '/menu', '/help']:
             welcome_text = """
 *🤖 Telegram Monitor Bot*
 
 Welcome to the Telegram Monitoring System\\!
 
-*Available Commands:*
-/help \\- Show available commands
-/status \\- Show monitoring status
-/groups \\- List monitored groups
-/watchlist \\- Show watchlist users
+Choose an option below to get started:
 
-*Admin Commands:*
-/addgroup \\- Add a group to monitor
-/adduser \\- Add user to watchlist
-/settings \\- Bot settings
+*📊 Status* \\- View current monitoring statistics
+*📁 Groups* \\- See monitored groups
+*👥 Watchlist* \\- View watched users
+*💬 Messages* \\- Recent logged messages
+*⚙️ Settings* \\- Bot configuration
+*ℹ️ Help* \\- Information and support
 
 For full management, use the web dashboard\\.
             """
+            
             await bot.send_message(
                 chat_id=chat_id,
                 text=welcome_text,
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=await create_main_menu_keyboard()
             )
-            
-        elif command_text == '/help':
-            help_text = """
-*📋 Available Commands:*
-
-*Information:*
-/status \\- Current monitoring status
-/groups \\- List all monitored groups
-/watchlist \\- Show users being monitored
-
-*Management:*
-/addgroup \\- Add new group to monitor
-/removegroup \\- Remove group from monitoring
-/adduser \\- Add user to watchlist
-/removeuser \\- Remove user from watchlist
-
-*Settings:*
-/settings \\- Configure bot settings
-/logs \\- View recent activity logs
-
-Use the web dashboard for advanced management\\.
-            """
-            await bot.send_message(
-                chat_id=chat_id,
-                text=help_text,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            
-        elif command_text == '/status':
-            # Get statistics
-            total_groups = await db.groups.count_documents({"is_active": True})
-            total_users = await db.watchlist_users.count_documents({"is_active": True})
-            total_messages = await db.message_logs.count_documents({})
-            
-            # Format timestamp without backslashes in f-string
-            timestamp_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
-            status_text = f"""
-*📊 Monitoring Status*
-
-*Active Monitoring:*
-• Groups: {total_groups}
-• Watchlist Users: {total_users}
-• Messages Logged: {total_messages}
-
-*System Status:* ✅ Online
-
-_Last updated: {escape_markdown_v2(timestamp_str)}_
-            """
-            await bot.send_message(
-                chat_id=chat_id,
-                text=status_text,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            
-        elif command_text == '/groups':
-            groups = await db.groups.find({"is_active": True}).to_list(50)
-            if not groups:
-                groups_text = "*📁 Monitored Groups*\n\nNo groups are currently being monitored\\."
-            else:
-                groups_list = []
-                for group_doc in groups:
-                    group = Group(**group_doc)
-                    groups_list.append(f"• {escape_markdown_v2(group.group_name)} \\(`{group.group_id}`\\)")
-                
-                groups_text = f"""
-*📁 Monitored Groups* \\({len(groups)}\\)
-
-{chr(10).join(groups_list)}
-
-Use /addgroup to add more groups\\.
-                """
-            
-            await bot.send_message(
-                chat_id=chat_id,
-                text=groups_text,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            
-        elif command_text == '/watchlist':
-            users = await db.watchlist_users.find({"is_active": True}).to_list(50)
-            if not users:
-                watchlist_text = "*👥 Watchlist Users*\n\nNo users are currently being monitored\\."
-            else:
-                users_list = []
-                for user_doc in users:
-                    user = WatchlistUser(**user_doc)
-                    scope = "Global" if not user.group_ids else f"{len(user.group_ids)} groups"
-                    users_list.append(f"• @{escape_markdown_v2(user.username)} \\({scope}\\)")
-                
-                watchlist_text = f"""
-*👥 Watchlist Users* \\({len(users)}\\)
-
-{chr(10).join(users_list)}
-
-Use /adduser to add more users\\.
-                """
-            
-            await bot.send_message(
-                chat_id=chat_id,
-                text=watchlist_text,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
+            logger.info(f"✅ Sent main menu to {username}")
         
         else:
+            # For any other command, show the main menu
             await bot.send_message(
                 chat_id=chat_id,
-                text="Unknown command\\. Use /help to see available commands\\.",
-                parse_mode=ParseMode.MARKDOWN_V2
+                text="Use the buttons below to navigate the bot\\. For full management, use the web dashboard\\.",
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=await create_main_menu_keyboard()
             )
+            logger.info(f"✅ Sent main menu for unknown command to {username}")
     
     except Exception as e:
-        logging.error(f"Error handling bot command: {e}")
+        logger.error(f"❌ Error handling bot command '{command_text}': {e}", exc_info=True)
 
 # ================== API ROUTES ==================
 
