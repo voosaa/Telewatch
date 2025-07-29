@@ -1817,12 +1817,91 @@ async def startup_event():
     """Initialize the application"""
     logger.info("Starting Telegram Monitor Bot API")
     
+    # Run database migrations for multi-tenancy
+    await migrate_database_for_multitenancy()
+    
     # Test bot connection
     try:
         bot_info = await bot.get_me()
         logger.info(f"Bot connected: @{bot_info.username}")
     except Exception as e:
         logger.error(f"Failed to connect to Telegram bot: {e}")
+
+async def migrate_database_for_multitenancy():
+    """Migrate existing data to support multi-tenancy"""
+    logger.info("Running multi-tenancy database migration...")
+    
+    try:
+        # Create a default organization for existing data
+        default_org_id = "00000000-0000-0000-0000-000000000000"
+        default_user_id = "00000000-0000-0000-0000-000000000001"
+        
+        # Check if default org exists
+        existing_org = await db.organizations.find_one({"id": default_org_id})
+        if not existing_org:
+            default_org = Organization(
+                id=default_org_id,
+                name="Legacy Organization",
+                description="Default organization for existing data",
+                plan=OrganizationPlan.FREE
+            )
+            await db.organizations.insert_one(default_org.dict())
+            logger.info("Created default organization for legacy data")
+        
+        # Migrate groups without tenant_id
+        groups_updated = await db.groups.update_many(
+            {"tenant_id": {"$exists": False}},
+            {"$set": {
+                "tenant_id": default_org_id,
+                "created_by": default_user_id
+            }}
+        )
+        if groups_updated.modified_count > 0:
+            logger.info(f"Migrated {groups_updated.modified_count} groups to multi-tenancy")
+        
+        # Migrate watchlist_users without tenant_id
+        users_updated = await db.watchlist_users.update_many(
+            {"tenant_id": {"$exists": False}},
+            {"$set": {
+                "tenant_id": default_org_id,
+                "created_by": default_user_id
+            }}
+        )
+        if users_updated.modified_count > 0:
+            logger.info(f"Migrated {users_updated.modified_count} watchlist users to multi-tenancy")
+        
+        # Migrate forwarding_destinations without tenant_id
+        destinations_updated = await db.forwarding_destinations.update_many(
+            {"tenant_id": {"$exists": False}},
+            {"$set": {
+                "tenant_id": default_org_id,
+                "created_by": default_user_id
+            }}
+        )
+        if destinations_updated.modified_count > 0:
+            logger.info(f"Migrated {destinations_updated.modified_count} forwarding destinations to multi-tenancy")
+        
+        # Migrate message_logs without tenant_id
+        messages_updated = await db.message_logs.update_many(
+            {"tenant_id": {"$exists": False}},
+            {"$set": {"tenant_id": default_org_id}}
+        )
+        if messages_updated.modified_count > 0:
+            logger.info(f"Migrated {messages_updated.modified_count} message logs to multi-tenancy")
+        
+        # Migrate forwarded_messages without tenant_id
+        forwarded_updated = await db.forwarded_messages.update_many(
+            {"tenant_id": {"$exists": False}},
+            {"$set": {"tenant_id": default_org_id}}
+        )
+        if forwarded_updated.modified_count > 0:
+            logger.info(f"Migrated {forwarded_updated.modified_count} forwarded messages to multi-tenancy")
+        
+        logger.info("Multi-tenancy database migration completed successfully")
+        
+    except Exception as e:
+        logger.error(f"Database migration failed: {e}")
+        # Don't fail startup, but log the error
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
