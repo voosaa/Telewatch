@@ -1451,6 +1451,299 @@ const SettingsPage = () => {
   );
 };
 
+// =================== SUBSCRIPTION MANAGEMENT COMPONENT ===================
+
+const SubscriptionManager = () => {
+  const [currentOrg, setCurrentOrg] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [updatingPlan, setUpdatingPlan] = useState(false);
+
+  useEffect(() => {
+    fetchCurrentOrganization();
+  }, []);
+
+  const fetchCurrentOrganization = async () => {
+    try {
+      const response = await axios.get(`${API}/organizations/current`);
+      setCurrentOrg(response.data);
+    } catch (error) {
+      console.error('Error fetching organization:', error);
+      setErrorMessage('Failed to load organization details: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updatePlan = async (newPlan) => {
+    setUpdatingPlan(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    
+    try {
+      const response = await axios.put(`${API}/organizations/current`, {
+        name: currentOrg.name,
+        description: currentOrg.description,
+        plan: newPlan
+      });
+      
+      setCurrentOrg(response.data);
+      setSuccessMessage(`Successfully upgraded to ${newPlan.toUpperCase()} plan!`);
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (error) {
+      console.error('Error updating plan:', error);
+      setErrorMessage('Failed to update plan: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setUpdatingPlan(false);
+    }
+  };
+
+  const planFeatures = {
+    free: [
+      'Up to 3 monitored groups',
+      'Up to 10 watchlist users',
+      'Basic message forwarding',
+      '1,000 messages per month',
+      'Email support'
+    ],
+    pro: [
+      'Up to 20 monitored groups',
+      'Up to 100 watchlist users',
+      'Advanced message forwarding',
+      'Unlimited messages',
+      'Advanced analytics',
+      'Priority support',
+      'Custom webhooks'
+    ],
+    enterprise: [
+      'Unlimited monitored groups',
+      'Unlimited watchlist users',
+      'Advanced message forwarding',
+      'Unlimited messages',
+      'Advanced analytics',
+      'Dedicated support',
+      'Custom integrations',
+      'SLA guarantees',
+      'Advanced security features'
+    ]
+  };
+
+  const planPrices = {
+    free: { monthly: 0, yearly: 0 },
+    pro: { monthly: 29, yearly: 290 },
+    enterprise: { monthly: 99, yearly: 990 }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Subscription Management</h1>
+          <p className="text-gray-600">Manage your organization's subscription plan</p>
+        </div>
+        <div className="text-right">
+          <div className="text-sm text-gray-600">Current Plan</div>
+          <div className="flex items-center gap-2">
+            <Crown className={`w-5 h-5 ${currentOrg?.plan === 'enterprise' ? 'text-purple-600' : currentOrg?.plan === 'pro' ? 'text-blue-600' : 'text-gray-600'}`} />
+            <span className="text-xl font-semibold capitalize">{currentOrg?.plan || 'Free'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Success/Error Messages */}
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+          ✅ {successMessage}
+        </div>
+      )}
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
+          ❌ {errorMessage}
+        </div>
+      )}
+
+      {/* Current Plan Overview */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Plan Details</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h4 className="font-medium text-gray-900 mb-2">Plan Features</h4>
+            <ul className="space-y-2">
+              {planFeatures[currentOrg?.plan || 'free'].map((feature, index) => (
+                <li key={index} className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-green-500" />
+                  <span className="text-sm text-gray-600">{feature}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-medium text-gray-900 mb-2">Usage Statistics</h4>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Groups:</span>
+                <span className="font-medium">{currentOrg?.usage_stats?.total_groups || 0}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Watchlist Users:</span>
+                <span className="font-medium">{currentOrg?.usage_stats?.total_users || 0}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Messages:</span>
+                <span className="font-medium">{currentOrg?.usage_stats?.total_messages || 0}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Forwarded:</span>
+                <span className="font-medium">{currentOrg?.usage_stats?.total_forwarded || 0}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Available Plans */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {Object.entries(planFeatures).map(([plan, features]) => {
+          const isCurrentPlan = currentOrg?.plan === plan;
+          const isUpgrade = (currentOrg?.plan === 'free' && plan !== 'free') || 
+                           (currentOrg?.plan === 'pro' && plan === 'enterprise');
+          const isDowngrade = (currentOrg?.plan === 'enterprise' && plan !== 'enterprise') ||
+                             (currentOrg?.plan === 'pro' && plan === 'free');
+          
+          return (
+            <div 
+              key={plan}
+              className={`bg-white rounded-lg shadow-md p-6 border-2 ${
+                isCurrentPlan 
+                  ? 'border-blue-500 bg-blue-50' 
+                  : plan === 'enterprise' 
+                    ? 'border-purple-200' 
+                    : 'border-gray-200'
+              }`}
+            >
+              <div className="text-center mb-4">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Crown className={`w-6 h-6 ${
+                    plan === 'enterprise' ? 'text-purple-600' : 
+                    plan === 'pro' ? 'text-blue-600' : 
+                    'text-gray-600'
+                  }`} />
+                  <h3 className="text-xl font-bold capitalize">{plan}</h3>
+                  {isCurrentPlan && (
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Current</span>
+                  )}
+                </div>
+                <div className="text-3xl font-bold text-gray-900">
+                  ${planPrices[plan].monthly}
+                  <span className="text-lg font-normal text-gray-600">/month</span>
+                </div>
+                {planPrices[plan].yearly > 0 && (
+                  <div className="text-sm text-gray-600">
+                    ${planPrices[plan].yearly}/year (save ${planPrices[plan].monthly * 12 - planPrices[plan].yearly})
+                  </div>
+                )}
+              </div>
+
+              <ul className="space-y-2 mb-6">
+                {features.map((feature, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                    <span className="text-sm text-gray-600">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="space-y-2">
+                {isCurrentPlan ? (
+                  <button 
+                    disabled
+                    className="w-full py-2 px-4 bg-gray-100 text-gray-500 rounded-lg cursor-not-allowed"
+                  >
+                    Current Plan
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => updatePlan(plan)}
+                      disabled={updatingPlan}
+                      className={`w-full py-2 px-4 rounded-lg transition-colors ${
+                        isUpgrade
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                          : isDowngrade
+                          ? 'bg-gray-500 hover:bg-gray-600 text-white'
+                          : 'bg-gray-200 hover:bg-gray-300 text-gray-800'
+                      } ${updatingPlan ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {updatingPlan ? (
+                        <RefreshCw className="w-4 h-4 animate-spin mx-auto" />
+                      ) : (
+                        <>
+                          {isUpgrade ? 'Upgrade' : isDowngrade ? 'Downgrade' : 'Select'}
+                          {plan !== 'free' && ` to ${plan.charAt(0).toUpperCase() + plan.slice(1)}`}
+                        </>
+                      )}
+                    </button>
+                    {plan !== 'free' && (
+                      <div className="text-xs text-gray-500 text-center">
+                        {isUpgrade ? '✨ Instant upgrade' : isDowngrade ? '⚠️ Changes apply at next billing cycle' : ''}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Billing Information */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Billing Information</h3>
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg">
+          <p className="text-sm">
+            <strong>💡 Note:</strong> This is a demo subscription system. In a production environment, 
+            this would integrate with payment processors like Stripe for actual billing management.
+          </p>
+        </div>
+      </div>
+
+      {/* Support */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Need Help?</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-4 border border-gray-200 rounded-lg">
+            <h4 className="font-medium text-gray-900 mb-2">Contact Support</h4>
+            <p className="text-sm text-gray-600 mb-3">
+              Have questions about plans or need assistance?
+            </p>
+            <button className="text-sm text-blue-600 hover:text-blue-700">
+              Contact Support →
+            </button>
+          </div>
+          <div className="p-4 border border-gray-200 rounded-lg">
+            <h4 className="font-medium text-gray-900 mb-2">Documentation</h4>
+            <p className="text-sm text-gray-600 mb-3">
+              Learn more about features and usage limits
+            </p>
+            <button className="text-sm text-blue-600 hover:text-blue-700">
+              View Docs →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // =================== MAIN APP COMPONENT ===================
 
 const MainApp = () => {
