@@ -105,8 +105,10 @@ class TelegramBotAPITester:
         """Test Group Management CRUD operations"""
         
         # Test CREATE group
+        import random
+        unique_id = f"-100{random.randint(1000000000, 9999999999)}"
         test_group_data = {
-            "group_id": "-1001234567890",
+            "group_id": unique_id,
             "group_name": "Test Monitoring Group",
             "group_type": "supergroup",
             "invite_link": "https://t.me/testgroup",
