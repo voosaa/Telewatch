@@ -1790,6 +1790,12 @@ const MainApp = () => {
             <UserManagement />
           </ProtectedRoute>
         );
+      case 'subscription':
+        return (
+          <ProtectedRoute requiredRoles={['owner', 'admin']}>
+            <SubscriptionManager />
+          </ProtectedRoute>
+        );
       case 'org-settings':
         return (
           <ProtectedRoute requiredRoles={['owner', 'admin']}>
