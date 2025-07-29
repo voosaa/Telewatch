@@ -335,8 +335,7 @@ class MultiTenantAPITester:
                         self.log_test("List Organization Users", False, f"HTTP {response.status_code}", response.text)
                     
                     # Test PUT /api/users/{id}/role (Owner only)
-                    role_update_data = {"role": "viewer"}
-                    response = self.session.put(f"{API_BASE}/users/{admin_user_id}/role", json=role_update_data)
+                    response = self.session.put(f"{API_BASE}/users/{admin_user_id}/role?new_role=viewer")
                     if response.status_code == 200:
                         updated_user = response.json()
                         if updated_user['role'] == 'viewer':
