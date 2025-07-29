@@ -378,7 +378,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Complete System Integration"
+    - "Message Forwarding System Testing Complete"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
