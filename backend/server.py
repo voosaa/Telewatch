@@ -1459,6 +1459,319 @@ async def set_webhook():
         logger.error(f"Failed to set webhook: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to set webhook: {str(e)}")
 
+# ================== AUTHENTICATION ROUTES ==================
+
+@api_router.post("/auth/register", response_model=TokenResponse)
+async def register_user(user_data: UserCreate):
+    """Register a new user and organization"""
+    try:
+        # Check if user already exists
+        existing_user = await db.users.find_one({"email": user_data.email})
+        if existing_user:
+            raise HTTPException(status_code=400, detail="User with this email already exists")
+        
+        # Create organization if provided
+        organization_id = None
+        if user_data.organization_name:
+            # Check if organization name is taken
+            existing_org = await db.organizations.find_one({"name": user_data.organization_name})
+            if existing_org:
+                raise HTTPException(status_code=400, detail="Organization name already taken")
+            
+            # Create new organization
+            organization = Organization(
+                name=user_data.organization_name,
+                description=f"Organization for {user_data.full_name}"
+            )
+            await db.organizations.insert_one(organization.dict())
+            organization_id = organization.id
+        else:
+            raise HTTPException(status_code=400, detail="Organization name is required")
+        
+        # Create user
+        user = User(
+            email=user_data.email,
+            password_hash=hash_password(user_data.password),
+            full_name=user_data.full_name,
+            role=UserRole.OWNER,  # First user in org is owner
+            organization_id=organization_id
+        )
+        
+        await db.users.insert_one(user.dict())
+        
+        # Create access token
+        access_token = create_access_token(user.id, organization_id, user.role.value)
+        
+        # Return response
+        user_response = UserResponse(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            is_active=user.is_active,
+            role=user.role,
+            organization_id=user.organization_id,
+            created_at=user.created_at
+        )
+        
+        return TokenResponse(
+            access_token=access_token,
+            expires_in=JWT_EXPIRATION_HOURS * 3600,
+            user=user_response
+        )
+        
+    except Exception as e:
+        if "already exists" in str(e) or "already taken" in str(e):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+
+@api_router.post("/auth/login", response_model=TokenResponse)
+async def login_user(user_credentials: UserLogin):
+    """Login user"""
+    try:
+        # Find user
+        user_doc = await db.users.find_one({"email": user_credentials.email})
+        if not user_doc:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        user = User(**user_doc)
+        
+        # Verify password
+        if not verify_password(user_credentials.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        # Check if user is active
+        if not user.is_active:
+            raise HTTPException(status_code=401, detail="Account is deactivated")
+        
+        # Update last login
+        await db.users.update_one(
+            {"id": user.id},
+            {"$set": {"last_login": datetime.now(timezone.utc)}}
+        )
+        
+        # Create access token
+        access_token = create_access_token(user.id, user.organization_id, user.role.value)
+        
+        # Return response
+        user_response = UserResponse(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            is_active=user.is_active,
+            role=user.role,
+            organization_id=user.organization_id,
+            created_at=user.created_at,
+            last_login=datetime.now(timezone.utc)
+        )
+        
+        return TokenResponse(
+            access_token=access_token,
+            expires_in=JWT_EXPIRATION_HOURS * 3600,
+            user=user_response
+        )
+        
+    except Exception as e:
+        if "Invalid email" in str(e) or "deactivated" in str(e):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+
+@api_router.get("/auth/me", response_model=UserResponse)
+async def get_current_user_info(current_user: Dict = Depends(get_current_active_user)):
+    """Get current user information"""
+    user = current_user["user"]
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        role=user.role,
+        organization_id=user.organization_id,
+        created_at=user.created_at,
+        last_login=user.last_login
+    )
+
+# ================== ORGANIZATION MANAGEMENT ROUTES ==================
+
+@api_router.get("/organizations/current")
+async def get_current_organization(current_user: Dict = Depends(get_current_active_user)):
+    """Get current user's organization"""
+    org_doc = await db.organizations.find_one({"id": current_user["organization_id"]})
+    if not org_doc:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return Organization(**org_doc)
+
+@api_router.put("/organizations/current")
+async def update_current_organization(
+    org_update: OrganizationCreate,
+    current_user: Dict = Depends(require_admin)
+):
+    """Update current organization (Admin/Owner only)"""
+    result = await db.organizations.update_one(
+        {"id": current_user["organization_id"]},
+        {"$set": {
+            "name": org_update.name,
+            "description": org_update.description,
+            "plan": org_update.plan,
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    
+    updated_org = await db.organizations.find_one({"id": current_user["organization_id"]})
+    return Organization(**updated_org)
+
+# ================== USER MANAGEMENT ROUTES ==================
+
+@api_router.get("/users", response_model=List[UserResponse])
+async def list_organization_users(current_user: Dict = Depends(get_current_active_user)):
+    """List all users in current organization"""
+    users = await db.users.find({
+        "organization_id": current_user["organization_id"],
+        "is_active": True
+    }).to_list(100)
+    
+    return [
+        UserResponse(
+            id=user["id"],
+            email=user["email"],
+            full_name=user["full_name"],
+            is_active=user["is_active"],
+            role=UserRole(user["role"]),
+            organization_id=user["organization_id"],
+            created_at=user["created_at"],
+            last_login=user.get("last_login")
+        )
+        for user in users
+    ]
+
+@api_router.post("/users/invite", response_model=UserResponse)
+async def invite_user(
+    invite_data: UserInvite,
+    current_user: Dict = Depends(require_admin)
+):
+    """Invite a new user to the organization (Admin/Owner only)"""
+    try:
+        # Check if user already exists
+        existing_user = await db.users.find_one({"email": invite_data.email})
+        if existing_user:
+            raise HTTPException(status_code=400, detail="User with this email already exists")
+        
+        # Generate temporary password (in production, send email with setup link)
+        temp_password = str(uuid.uuid4())[:8]
+        
+        # Create user
+        user = User(
+            email=invite_data.email,
+            password_hash=hash_password(temp_password),
+            full_name=invite_data.full_name,
+            role=invite_data.role,
+            organization_id=current_user["organization_id"]
+        )
+        
+        await db.users.insert_one(user.dict())
+        
+        # In production, send email with temp password and setup instructions
+        logger.info(f"User invited: {invite_data.email} with temporary password: {temp_password}")
+        
+        return UserResponse(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            is_active=user.is_active,
+            role=user.role,
+            organization_id=user.organization_id,
+            created_at=user.created_at
+        )
+        
+    except Exception as e:
+        if "already exists" in str(e):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Failed to invite user: {str(e)}")
+
+@api_router.put("/users/{user_id}/role")
+async def update_user_role(
+    user_id: str,
+    new_role: UserRole,
+    current_user: Dict = Depends(require_owner)
+):
+    """Update user role (Owner only)"""
+    # Can't change own role
+    if user_id == current_user["user_id"]:
+        raise HTTPException(status_code=400, detail="Cannot change your own role")
+    
+    result = await db.users.update_one(
+        {
+            "id": user_id,
+            "organization_id": current_user["organization_id"],
+            "is_active": True
+        },  
+        {"$set": {"role": new_role.value, "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"message": f"User role updated to {new_role.value}"}
+
+@api_router.delete("/users/{user_id}")
+async def deactivate_user(
+    user_id: str,
+    current_user: Dict = Depends(require_admin)
+):
+    """Deactivate user (Admin/Owner only)"""
+    # Can't deactivate self
+    if user_id == current_user["user_id"]:
+        raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
+    
+    result = await db.users.update_one(
+        {
+            "id": user_id,
+            "organization_id": current_user["organization_id"]
+        },
+        {"$set": {"is_active": False, "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"message": "User deactivated successfully"}
+
+# ================== UPDATED API ROUTES (With Multi-tenancy) ==================
+
+# Group Management Routes (Updated)
+@api_router.post("/groups", response_model=Group)
+async def create_group(group: GroupCreate, current_user: Dict = Depends(require_admin)):
+    """Add a new group to monitor (Admin/Owner only)"""
+    try:
+        # Check if group already exists for this tenant
+        existing = await db.groups.find_one({
+            "tenant_id": current_user["organization_id"],
+            "group_id": group.group_id
+        })
+        if existing:
+            raise HTTPException(status_code=400, detail="Group already exists")
+        
+        new_group = Group(
+            tenant_id=current_user["organization_id"],
+            created_by=current_user["user_id"],
+            **group.dict()
+        )
+        await db.groups.insert_one(new_group.dict())
+        return new_group
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create group: {str(e)}")
+
+@api_router.get("/groups", response_model=List[Group])
+async def get_groups(current_user: Dict = Depends(get_current_active_user)):
+    """Get all monitored groups for current organization"""
+    groups = await db.groups.find({
+        "tenant_id": current_user["organization_id"],
+        "is_active": True
+    }).to_list(100)
+    return [Group(**group) for group in groups]
+
 # Test Routes
 @api_router.get("/")
 async def root():
