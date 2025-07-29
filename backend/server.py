@@ -29,6 +29,10 @@ db = client[os.environ['DB_NAME']]
 telegram_token = os.environ['TELEGRAM_TOKEN']
 bot = Bot(token=telegram_token)
 
+# Polling state
+polling_task = None
+last_update_id = 0
+
 # Create the main app
 app = FastAPI()
 
