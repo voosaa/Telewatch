@@ -323,9 +323,10 @@ def escape_markdown_v2(text: str) -> str:
         text = text.replace(char, f'\\{char}')
     return text
 
-async def check_if_user_monitored(user_id: str, username: str, group_id: str) -> Optional[WatchlistUser]:
-    """Check if user is in watchlist for monitoring"""
+async def check_if_user_monitored(user_id: str, username: str, group_id: str, tenant_id: str) -> Optional[WatchlistUser]:
+    """Check if user is in watchlist for monitoring (tenant-specific)"""
     query = {
+        "tenant_id": tenant_id,
         "is_active": True,
         "$or": [
             {"username": username.lower()},
