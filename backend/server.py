@@ -141,6 +141,7 @@ class GroupCreate(BaseModel):
 
 class Group(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tenant_id: str  # Organization ID for multi-tenancy
     group_id: str
     group_name: str
     group_type: str
@@ -149,6 +150,7 @@ class Group(BaseModel):
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_by: str  # User ID who created this group
 
 class ForwardingDestinationCreate(BaseModel):
     destination_id: str  # Chat/Channel ID where messages will be forwarded
@@ -159,6 +161,7 @@ class ForwardingDestinationCreate(BaseModel):
 
 class ForwardingDestination(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tenant_id: str  # Organization ID for multi-tenancy
     destination_id: str
     destination_name: str
     destination_type: str
@@ -168,6 +171,7 @@ class ForwardingDestination(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     message_count: int = 0  # Track forwarded messages
     last_forwarded: Optional[datetime] = None
+    created_by: str  # User ID who created this destination
 
 class WatchlistUserCreate(BaseModel):
     username: str
@@ -179,6 +183,7 @@ class WatchlistUserCreate(BaseModel):
 
 class WatchlistUser(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tenant_id: str  # Organization ID for multi-tenancy
     username: str
     user_id: Optional[str] = None
     full_name: Optional[str] = None
@@ -188,9 +193,11 @@ class WatchlistUser(BaseModel):
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_by: str  # User ID who created this user
 
 class ForwardedMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tenant_id: str  # Organization ID for multi-tenancy
     original_message_id: str
     from_group_id: str
     from_group_name: str
@@ -208,6 +215,7 @@ class ForwardedMessage(BaseModel):
 
 class MessageLog(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tenant_id: str  # Organization ID for multi-tenancy
     message_id: str
     group_id: str
     group_name: str
