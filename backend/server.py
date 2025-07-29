@@ -188,6 +188,123 @@ async def check_keyword_match(message_text: str, keywords: List[str]) -> List[st
     
     return matched
 
+async def format_forwarded_message(
+    message_text: str, 
+    message_type: str,
+    username: str,
+    group_name: str,
+    matched_keywords: List[str],
+    timestamp: datetime,
+    media_info: Optional[Dict[str, Any]] = None
+) -> str:
+    """Format message for forwarding with attribution"""
+    
+    # Format timestamp
+    time_str = timestamp.strftime('%Y-%m-%d %H:%M UTC')
+    
+    # Create header with source attribution
+    header = f"🔔 *Monitor Alert*\n"
+    header += f"👤 User: @{escape_markdown_v2(username)}\n"
+    header += f"📍 Group: {escape_markdown_v2(group_name)}\n"
+    header += f"🕐 Time: {escape_markdown_v2(time_str)}\n"
+    
+    # Add keywords if matched
+    if matched_keywords:
+        keywords_str = ", ".join(matched_keywords)
+        header += f"🔍 Keywords: {escape_markdown_v2(keywords_str)}\n"
+    
+    header += f"📝 Type: {escape_markdown_v2(message_type.title())}\n"
+    header += "─" * 30 + "\n\n"
+    
+    # Add message content
+    if message_text:
+        content = escape_markdown_v2(message_text)
+    elif message_type != "text":
+        content = f"\\[{message_type.upper()} MESSAGE\\]"
+        if media_info:
+            if message_type == "photo" and "file_size" in media_info:
+                content += f"\n📊 Size: {media_info['file_size']} bytes"
+            elif message_type == "video" and "duration" in media_info:
+                content += f"\n⏱️ Duration: {media_info['duration']}s"
+            elif message_type == "document" and "file_name" in media_info:
+                content += f"\n📄 File: {escape_markdown_v2(media_info['file_name'])}"
+    else:
+        content = "\\[No text content\\]"
+    
+    return header + content
+
+async def forward_message_to_destinations(
+    message_text: str,
+    message_type: str,
+    username: str,
+    group_name: str,
+    matched_keywords: List[str],
+    timestamp: datetime,
+    destinations: List[str],
+    media_info: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Forward message to specified destinations"""
+    
+    forwarding_results = {
+        "success_count": 0,
+        "failed_count": 0,
+        "forwarded_to": [],
+        "errors": []
+    }
+    
+    if not destinations:
+        return forwarding_results
+    
+    # Get active forwarding destinations
+    dest_docs = await db.forwarding_destinations.find({
+        "id": {"$in": destinations},
+        "is_active": True
+    }).to_list(100)
+    
+    if not dest_docs:
+        forwarding_results["errors"].append("No active forwarding destinations found")
+        return forwarding_results
+    
+    # Format the message for forwarding
+    formatted_message = await format_forwarded_message(
+        message_text, message_type, username, group_name, 
+        matched_keywords, timestamp, media_info
+    )
+    
+    # Forward to each destination
+    for dest_doc in dest_docs:
+        destination = ForwardingDestination(**dest_doc)
+        
+        try:
+            # Send message to destination
+            await bot.send_message(
+                chat_id=destination.destination_id,
+                text=formatted_message,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            
+            # Update destination stats
+            await db.forwarding_destinations.update_one(
+                {"id": destination.id},
+                {
+                    "$inc": {"message_count": 1},
+                    "$set": {"last_forwarded": datetime.now(timezone.utc)}
+                }
+            )
+            
+            forwarding_results["success_count"] += 1
+            forwarding_results["forwarded_to"].append(destination.destination_name)
+            
+            logger.info(f"✅ Forwarded message to {destination.destination_name}")
+            
+        except Exception as e:
+            forwarding_results["failed_count"] += 1
+            error_msg = f"Failed to forward to {destination.destination_name}: {str(e)}"
+            forwarding_results["errors"].append(error_msg)
+            logger.error(f"❌ {error_msg}")
+    
+    return forwarding_results
+
 # ================== TELEGRAM BOT HANDLERS ==================
 
 async def create_main_menu_keyboard():
