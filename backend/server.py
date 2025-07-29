@@ -208,6 +208,11 @@ async def handle_telegram_message(update: Update) -> None:
     try:
         logger.info(f"Processing telegram update: {update.update_id}")
         
+        # Handle callback queries (button clicks)
+        if update.callback_query:
+            await handle_callback_query(update.callback_query)
+            return
+        
         message = update.message
         if not message:
             logger.info("No message in update, skipping")
