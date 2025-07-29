@@ -28,6 +28,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'groups', label: 'Groups', icon: Users },
     { id: 'watchlist', label: 'Watchlist', icon: Shield },
+    { id: 'forwarding', label: 'Forwarding', icon: ChevronRight },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'bot', label: 'Bot Status', icon: Bot },
     { id: 'settings', label: 'Settings', icon: Settings },
