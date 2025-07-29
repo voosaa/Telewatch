@@ -106,16 +106,28 @@ const Dashboard = () => {
       color: 'bg-green-500' 
     },
     { 
+      title: 'Forwarding Destinations', 
+      value: stats.total_forwarding_destinations || 0, 
+      icon: ChevronRight, 
+      color: 'bg-indigo-500' 
+    },
+    { 
       title: 'Total Messages', 
       value: stats.total_messages || 0, 
       icon: MessageSquare, 
       color: 'bg-purple-500' 
     },
     { 
-      title: 'Messages Today', 
-      value: stats.messages_today || 0, 
+      title: 'Messages Forwarded', 
+      value: stats.total_forwarded || 0, 
       icon: Activity, 
       color: 'bg-orange-500' 
+    },
+    { 
+      title: 'Forwarding Success Rate', 
+      value: `${stats.forwarding_success_rate || 0}%`, 
+      icon: Activity, 
+      color: 'bg-emerald-500' 
     },
   ];
 
