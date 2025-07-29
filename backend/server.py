@@ -166,6 +166,41 @@ async def check_keyword_match(message_text: str, keywords: List[str]) -> List[st
 
 # ================== TELEGRAM BOT HANDLERS ==================
 
+async def create_main_menu_keyboard():
+    """Create the main menu inline keyboard"""
+    keyboard = [
+        [
+            InlineKeyboardButton("📊 Status", callback_data="status"),
+            InlineKeyboardButton("📁 Groups", callback_data="groups")
+        ],
+        [
+            InlineKeyboardButton("👥 Watchlist", callback_data="watchlist"),
+            InlineKeyboardButton("💬 Messages", callback_data="messages")
+        ],
+        [
+            InlineKeyboardButton("⚙️ Settings", callback_data="settings"),
+            InlineKeyboardButton("ℹ️ Help", callback_data="help")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+async def create_admin_menu_keyboard():
+    """Create admin management keyboard"""
+    keyboard = [
+        [
+            InlineKeyboardButton("➕ Add Group", callback_data="add_group"),
+            InlineKeyboardButton("➕ Add User", callback_data="add_user")
+        ],
+        [
+            InlineKeyboardButton("🗑️ Remove Group", callback_data="remove_group"),
+            InlineKeyboardButton("🗑️ Remove User", callback_data="remove_user")
+        ],
+        [
+            InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 async def handle_callback_query(callback_query) -> None:
     """Handle callback queries (button clicks)"""
     try:
@@ -181,27 +216,282 @@ async def handle_callback_query(callback_query) -> None:
         await bot.answer_callback_query(callback_query_id=query_id)
         
         # Handle different callback data
-        if data.startswith("confirm_"):
-            await bot.send_message(
+        if data == "status":
+            # Get statistics
+            total_groups = await db.groups.count_documents({"is_active": True})
+            total_users = await db.watchlist_users.count_documents({"is_active": True})
+            total_messages = await db.message_logs.count_documents({})
+            
+            # Format timestamp without backslashes in f-string
+            timestamp_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+            status_text = f"""
+*📊 Monitoring Status*
+
+*Active Monitoring:*
+• Groups: {total_groups}
+• Watchlist Users: {total_users}
+• Messages Logged: {total_messages}
+
+*System Status:* ✅ Online
+
+_Last updated: {escape_markdown_v2(timestamp_str)}_
+            """
+            keyboard = [[InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]]
+            
+            await bot.edit_message_text(
                 chat_id=chat_id,
-                text="✅ Action confirmed!",
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-        elif data.startswith("cancel_"):
-            await bot.send_message(
-                chat_id=chat_id,
-                text="❌ Action cancelled!",
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-        else:
-            await bot.send_message(
-                chat_id=chat_id,
-                text="Unknown action\\.",
-                parse_mode=ParseMode.MARKDOWN_V2
+                message_id=callback_query.message.message_id,
+                text=status_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
             
+        elif data == "groups":
+            groups = await db.groups.find({"is_active": True}).to_list(10)
+            if not groups:
+                groups_text = "*📁 Monitored Groups*\n\nNo groups are currently being monitored\\."
+            else:
+                groups_list = []
+                for group_doc in groups:
+                    group = Group(**group_doc)
+                    groups_list.append(f"• {escape_markdown_v2(group.group_name)}")
+                
+                groups_text = f"""
+*📁 Monitored Groups* \\({len(groups)}\\)
+
+{chr(10).join(groups_list)}
+
+Click 'Manage Groups' for more options\\.
+                """
+            
+            keyboard = [
+                [InlineKeyboardButton("⚙️ Manage Groups", callback_data="admin_menu")],
+                [InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]
+            ]
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=callback_query.message.message_id,
+                text=groups_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+        elif data == "watchlist":
+            users = await db.watchlist_users.find({"is_active": True}).to_list(10)
+            if not users:
+                watchlist_text = "*👥 Watchlist Users*\n\nNo users are currently being monitored\\."
+            else:
+                users_list = []
+                for user_doc in users:
+                    user = WatchlistUser(**user_doc)
+                    scope = "Global" if not user.group_ids else f"{len(user.group_ids)} groups"
+                    users_list.append(f"• @{escape_markdown_v2(user.username)} \\({scope}\\)")
+                
+                watchlist_text = f"""
+*👥 Watchlist Users* \\({len(users)}\\)
+
+{chr(10).join(users_list)}
+
+Click 'Manage Users' for more options\\.
+                """
+            
+            keyboard = [
+                [InlineKeyboardButton("⚙️ Manage Users", callback_data="admin_menu")],
+                [InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]
+            ]
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=callback_query.message.message_id,
+                text=watchlist_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+        elif data == "messages":
+            recent_messages = await db.message_logs.find().sort("timestamp", -1).limit(5).to_list(5)
+            
+            if not recent_messages:
+                messages_text = "*💬 Recent Messages*\n\nNo messages logged yet\\."
+            else:
+                messages_list = []
+                for msg_doc in recent_messages:
+                    msg = MessageLog(**msg_doc)
+                    timestamp = msg.timestamp.strftime('%m-%d %H:%M')
+                    text_preview = msg.message_text[:30] + "..." if msg.message_text and len(msg.message_text) > 30 else msg.message_text or f"[{msg.message_type}]"
+                    messages_list.append(f"• {timestamp} @{escape_markdown_v2(msg.username)}: {escape_markdown_v2(text_preview)}")
+                
+                messages_text = f"""
+*💬 Recent Messages* \\({len(recent_messages)}\\)
+
+{chr(10).join(messages_list)}
+
+Use the web dashboard for detailed search\\.
+                """
+            
+            keyboard = [
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://9ee19252-a7c1-46fc-8e44-703ba38492ab.preview.emergentagent.com")],
+                [InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]
+            ]
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=callback_query.message.message_id,
+                text=messages_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+        elif data == "settings":
+            settings_text = """
+*⚙️ Bot Settings*
+
+*Current Configuration:*
+• Webhook: ✅ Active
+• Monitoring: ✅ Online
+• Database: ✅ Connected
+
+*Web Dashboard:*
+Use the dashboard for advanced settings and configuration\\.
+
+*Support:*
+Contact support for issues or questions\\.
+            """
+            
+            keyboard = [
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://9ee19252-a7c1-46fc-8e44-703ba38492ab.preview.emergentagent.com")],
+                [InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]
+            ]
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=callback_query.message.message_id,
+                text=settings_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+        elif data == "help":
+            help_text = """
+*ℹ️ Help & Information*
+
+*🤖 About This Bot:*
+This bot monitors Telegram groups and tracks messages from specific users based on your watchlist\\.
+
+*📋 Main Features:*
+• Monitor multiple Telegram groups
+• Track specific users \\(watchlist\\)
+• Filter by keywords
+• Log all monitored messages
+• Web dashboard for management
+
+*🌐 Web Dashboard:*
+For full management capabilities, use the web dashboard\\. You can add/remove groups, manage watchlists, search messages, and view detailed analytics\\.
+
+*🔧 Getting Started:*
+1\\. Add groups to monitor
+2\\. Add users to watchlist
+3\\. Configure keywords \\(optional\\)
+4\\. Start monitoring\\!
+            """
+            
+            keyboard = [
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://9ee19252-a7c1-46fc-8e44-703ba38492ab.preview.emergentagent.com")],
+                [InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]
+            ]
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=callback_query.message.message_id,
+                text=help_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+        elif data == "admin_menu":
+            admin_text = """
+*⚙️ Administration Menu*
+
+*Quick Actions:*
+Use the buttons below for basic management, or use the web dashboard for advanced features\\.
+
+*Note:* For detailed configuration, group management, and user watchlists, please use the web dashboard\\.
+            """
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=callback_query.message.message_id,
+                text=admin_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=await create_admin_menu_keyboard()
+            )
+            
+        elif data == "main_menu":
+            welcome_text = """
+*🤖 Telegram Monitor Bot*
+
+Welcome to the Telegram Monitoring System\\!
+
+Choose an option below to get started:
+
+*📊 Status* \\- View current monitoring statistics
+*📁 Groups* \\- See monitored groups
+*👥 Watchlist* \\- View watched users
+*💬 Messages* \\- Recent logged messages
+*⚙️ Settings* \\- Bot configuration
+*ℹ️ Help* \\- Information and support
+
+For full management, use the web dashboard\\.
+            """
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=callback_query.message.message_id,
+                text=welcome_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=await create_main_menu_keyboard()
+            )
+            
+        elif data.startswith("add_") or data.startswith("remove_"):
+            info_text = """
+*🌐 Use Web Dashboard*
+
+For adding/removing groups and users, please use the web dashboard where you have full management capabilities:
+
+• Complete group management
+• User watchlist configuration  
+• Keyword filtering setup
+• Message search and analytics
+• And much more\\!
+            """
+            
+            keyboard = [
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://9ee19252-a7c1-46fc-8e44-703ba38492ab.preview.emergentagent.com")],
+                [InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_menu")]
+            ]
+            
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=callback_query.message.message_id,
+                text=info_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        
+        else:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=callback_query.message.message_id,
+                text="Unknown action\\. Please try again\\.",
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=await create_main_menu_keyboard()
+            )
+            
+        logger.info(f"✅ Processed callback query '{data}' from {username}")
+            
     except Exception as e:
-        logger.error(f"Error handling callback query: {e}", exc_info=True)
+        logger.error(f"❌ Error handling callback query '{data}': {e}", exc_info=True)
 
 async def handle_telegram_message(update: Update) -> None:
     """Process incoming Telegram messages"""
