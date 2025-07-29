@@ -315,9 +315,9 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Frontend Dashboard Implementation"
-    - "UI Integration Testing"
-  stuck_tasks: []
+    - "Groups Management Add Functionality Fix"
+  stuck_tasks:
+    - "Dashboard UI for Group Management"
   test_all: false
   test_priority: "high_first"
 
