@@ -440,6 +440,8 @@ const WatchlistManager = () => {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [newUser, setNewUser] = useState({
     username: '',
     user_id: '',
