@@ -477,14 +477,20 @@ const WatchlistManager = () => {
 
   const handleAddUser = async (e) => {
     e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+    
     try {
-      await axios.post(`${API}/watchlist`, newUser);
+      const response = await axios.post(`${API}/watchlist`, newUser);
       setNewUser({ username: '', user_id: '', full_name: '', group_ids: [], keywords: [] });
       setShowAddForm(false);
+      setSuccessMessage(`User "@${response.data.username}" added to watchlist successfully!`);
       fetchUsers();
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
       console.error('Error adding user:', error);
-      alert('Error adding user: ' + (error.response?.data?.detail || error.message));
+      const errorMsg = error.response?.data?.detail || error.message;
+      setErrorMessage(`Failed to add user: ${errorMsg}`);
     }
   };
 
@@ -492,10 +498,12 @@ const WatchlistManager = () => {
     if (window.confirm('Are you sure you want to remove this user from watchlist?')) {
       try {
         await axios.delete(`${API}/watchlist/${userId}`);
+        setSuccessMessage('User removed from watchlist successfully!');
         fetchUsers();
+        setTimeout(() => setSuccessMessage(''), 3000);
       } catch (error) {
         console.error('Error deleting user:', error);
-        alert('Error deleting user: ' + (error.response?.data?.detail || error.message));
+        setErrorMessage('Failed to delete user: ' + (error.response?.data?.detail || error.message));
       }
     }
   };
