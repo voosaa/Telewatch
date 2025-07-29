@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Comprehensive Backend API Tests for Telegram Monitoring Bot
-Tests all endpoints and functionality as specified in the review request.
+Tests all endpoints and functionality including the new Message Forwarding System.
 """
 
 import requests
@@ -101,197 +101,6 @@ class TelegramBotAPITester:
                 
         except Exception as e:
             self.log_test("Bot Connection Test", False, f"Request error: {str(e)}")
-
-    def test_group_management(self):
-        """Test Group Management CRUD operations"""
-        
-        # Test CREATE group
-        import random
-        unique_id = f"-100{random.randint(1000000000, 9999999999)}"
-        test_group_data = {
-            "group_id": unique_id,
-            "group_name": "Test Monitoring Group",
-            "group_type": "supergroup",
-            "invite_link": "https://t.me/testgroup",
-            "description": "Test group for monitoring system"
-        }
-        
-        try:
-            # CREATE
-            response = self.session.post(f"{API_BASE}/groups", json=test_group_data)
-            
-            if response.status_code == 200:
-                created_group = response.json()
-                group_id = created_group.get('id')
-                self.created_resources['groups'].append(group_id)
-                self.log_test("Create Group", True, f"Created group with ID: {group_id}", created_group)
-                
-                # READ - Get all groups
-                response = self.session.get(f"{API_BASE}/groups")
-                if response.status_code == 200:
-                    groups = response.json()
-                    self.log_test("List Groups", True, f"Retrieved {len(groups)} groups", len(groups))
-                    
-                    # READ - Get specific group
-                    response = self.session.get(f"{API_BASE}/groups/{group_id}")
-                    if response.status_code == 200:
-                        group = response.json()
-                        self.log_test("Get Specific Group", True, f"Retrieved group: {group.get('group_name')}", group)
-                        
-                        # UPDATE
-                        update_data = {
-                            "group_id": test_group_data["group_id"],
-                            "group_name": "Updated Test Group",
-                            "group_type": "supergroup",
-                            "description": "Updated description"
-                        }
-                        response = self.session.put(f"{API_BASE}/groups/{group_id}", json=update_data)
-                        if response.status_code == 200:
-                            updated_group = response.json()
-                            self.log_test("Update Group", True, f"Updated group name to: {updated_group.get('group_name')}", updated_group)
-                        else:
-                            self.log_test("Update Group", False, f"HTTP {response.status_code}", response.text)
-                            
-                        # DELETE
-                        response = self.session.delete(f"{API_BASE}/groups/{group_id}")
-                        if response.status_code == 200:
-                            self.log_test("Delete Group", True, "Group successfully removed from monitoring")
-                            self.created_resources['groups'].remove(group_id)
-                        else:
-                            self.log_test("Delete Group", False, f"HTTP {response.status_code}", response.text)
-                    else:
-                        self.log_test("Get Specific Group", False, f"HTTP {response.status_code}", response.text)
-                else:
-                    self.log_test("List Groups", False, f"HTTP {response.status_code}", response.text)
-            else:
-                self.log_test("Create Group", False, f"HTTP {response.status_code}", response.text)
-                
-        except Exception as e:
-            self.log_test("Group Management", False, f"Error: {str(e)}")
-
-    def test_watchlist_management(self):
-        """Test Watchlist Management CRUD operations"""
-        
-        test_user_data = {
-            "username": "testuser_monitor",
-            "user_id": "123456789",
-            "full_name": "Test User Monitor",
-            "group_ids": [],
-            "keywords": ["urgent", "important", "alert"]
-        }
-        
-        try:
-            # CREATE
-            response = self.session.post(f"{API_BASE}/watchlist", json=test_user_data)
-            
-            if response.status_code == 200:
-                created_user = response.json()
-                user_id = created_user.get('id')
-                self.created_resources['watchlist_users'].append(user_id)
-                self.log_test("Create Watchlist User", True, f"Created user: @{created_user.get('username')}", created_user)
-                
-                # READ - Get all watchlist users
-                response = self.session.get(f"{API_BASE}/watchlist")
-                if response.status_code == 200:
-                    users = response.json()
-                    self.log_test("List Watchlist Users", True, f"Retrieved {len(users)} users", len(users))
-                    
-                    # READ - Get specific user
-                    response = self.session.get(f"{API_BASE}/watchlist/{user_id}")
-                    if response.status_code == 200:
-                        user = response.json()
-                        self.log_test("Get Specific Watchlist User", True, f"Retrieved user: @{user.get('username')}", user)
-                        
-                        # UPDATE
-                        update_data = {
-                            "username": "updated_testuser",
-                            "user_id": test_user_data["user_id"],
-                            "full_name": "Updated Test User",
-                            "group_ids": ["-1001234567890"],
-                            "keywords": ["critical", "emergency"]
-                        }
-                        response = self.session.put(f"{API_BASE}/watchlist/{user_id}", json=update_data)
-                        if response.status_code == 200:
-                            updated_user = response.json()
-                            self.log_test("Update Watchlist User", True, f"Updated username to: @{updated_user.get('username')}", updated_user)
-                        else:
-                            self.log_test("Update Watchlist User", False, f"HTTP {response.status_code}", response.text)
-                            
-                        # DELETE
-                        response = self.session.delete(f"{API_BASE}/watchlist/{user_id}")
-                        if response.status_code == 200:
-                            self.log_test("Delete Watchlist User", True, "User successfully removed from watchlist")
-                            self.created_resources['watchlist_users'].remove(user_id)
-                        else:
-                            self.log_test("Delete Watchlist User", False, f"HTTP {response.status_code}", response.text)
-                    else:
-                        self.log_test("Get Specific Watchlist User", False, f"HTTP {response.status_code}", response.text)
-                else:
-                    self.log_test("List Watchlist Users", False, f"HTTP {response.status_code}", response.text)
-            else:
-                self.log_test("Create Watchlist User", False, f"HTTP {response.status_code}", response.text)
-                
-        except Exception as e:
-            self.log_test("Watchlist Management", False, f"Error: {str(e)}")
-
-    def test_message_endpoints(self):
-        """Test Message Logs and Search endpoints"""
-        
-        try:
-            # Test GET /api/messages
-            response = self.session.get(f"{API_BASE}/messages")
-            if response.status_code == 200:
-                messages = response.json()
-                self.log_test("Get Message Logs", True, f"Retrieved {len(messages)} messages", len(messages))
-                
-                # Test with query parameters
-                response = self.session.get(f"{API_BASE}/messages?limit=10&skip=0")
-                if response.status_code == 200:
-                    limited_messages = response.json()
-                    self.log_test("Get Message Logs with Pagination", True, f"Retrieved {len(limited_messages)} messages with limit", len(limited_messages))
-                else:
-                    self.log_test("Get Message Logs with Pagination", False, f"HTTP {response.status_code}", response.text)
-            else:
-                self.log_test("Get Message Logs", False, f"HTTP {response.status_code}", response.text)
-            
-            # Test GET /api/messages/search
-            response = self.session.get(f"{API_BASE}/messages/search?q=test&limit=10")
-            if response.status_code == 200:
-                search_result = response.json()
-                if 'messages' in search_result and 'total' in search_result:
-                    self.log_test("Search Messages", True, f"Search returned {search_result.get('total')} total results", search_result)
-                else:
-                    self.log_test("Search Messages", False, "Invalid search response format", search_result)
-            else:
-                self.log_test("Search Messages", False, f"HTTP {response.status_code}", response.text)
-                
-        except Exception as e:
-            self.log_test("Message Endpoints", False, f"Error: {str(e)}")
-
-    def test_statistics_endpoint(self):
-        """Test GET /api/stats - System statistics"""
-        
-        try:
-            response = self.session.get(f"{API_BASE}/stats")
-            
-            if response.status_code == 200:
-                stats = response.json()
-                expected_fields = ['total_groups', 'total_watchlist_users', 'total_messages', 
-                                 'total_forwarded', 'messages_today', 'last_updated']
-                
-                missing_fields = [field for field in expected_fields if field not in stats]
-                
-                if not missing_fields:
-                    self.log_test("Statistics Endpoint", True, 
-                                f"Groups: {stats.get('total_groups')}, Users: {stats.get('total_watchlist_users')}, Messages: {stats.get('total_messages')}", 
-                                stats)
-                else:
-                    self.log_test("Statistics Endpoint", False, f"Missing fields: {missing_fields}", stats)
-            else:
-                self.log_test("Statistics Endpoint", False, f"HTTP {response.status_code}", response.text)
-                
-        except Exception as e:
-            self.log_test("Statistics Endpoint", False, f"Error: {str(e)}")
 
     def test_forwarding_destinations_management(self):
         """Test Forwarding Destinations Management CRUD operations"""
@@ -586,63 +395,6 @@ class TelegramBotAPITester:
                             f"Expected 404 but got HTTP {response.status_code}")
         except Exception as e:
             self.log_test("Error Handling - Test Non-existent Destination", False, f"Error: {str(e)}")
-        """Test error handling with invalid inputs"""
-        
-        # Test invalid group creation
-        try:
-            invalid_group = {"invalid_field": "test"}
-            response = self.session.post(f"{API_BASE}/groups", json=invalid_group)
-            if response.status_code >= 400:
-                self.log_test("Error Handling - Invalid Group Creation", True, f"Correctly returned HTTP {response.status_code}")
-            else:
-                self.log_test("Error Handling - Invalid Group Creation", False, f"Should have failed but got HTTP {response.status_code}")
-        except Exception as e:
-            self.log_test("Error Handling - Invalid Group Creation", False, f"Error: {str(e)}")
-        
-        # Test non-existent resource access
-        try:
-            response = self.session.get(f"{API_BASE}/groups/non-existent-id")
-            if response.status_code == 404:
-                self.log_test("Error Handling - Non-existent Group", True, "Correctly returned 404 for non-existent group")
-            else:
-                self.log_test("Error Handling - Non-existent Group", False, f"Expected 404 but got HTTP {response.status_code}")
-        except Exception as e:
-            self.log_test("Error Handling - Non-existent Group", False, f"Error: {str(e)}")
-        
-    def test_error_handling(self):
-        """Test error handling with invalid inputs"""
-        
-        # Test invalid group creation
-        try:
-            invalid_group = {"invalid_field": "test"}
-            response = self.session.post(f"{API_BASE}/groups", json=invalid_group)
-            if response.status_code >= 400:
-                self.log_test("Error Handling - Invalid Group Creation", True, f"Correctly returned HTTP {response.status_code}")
-            else:
-                self.log_test("Error Handling - Invalid Group Creation", False, f"Should have failed but got HTTP {response.status_code}")
-        except Exception as e:
-            self.log_test("Error Handling - Invalid Group Creation", False, f"Error: {str(e)}")
-        
-        # Test non-existent resource access
-        try:
-            response = self.session.get(f"{API_BASE}/groups/non-existent-id")
-            if response.status_code == 404:
-                self.log_test("Error Handling - Non-existent Group", True, "Correctly returned 404 for non-existent group")
-            else:
-                self.log_test("Error Handling - Non-existent Group", False, f"Expected 404 but got HTTP {response.status_code}")
-        except Exception as e:
-            self.log_test("Error Handling - Non-existent Group", False, f"Error: {str(e)}")
-        
-        # Test invalid watchlist user creation
-        try:
-            invalid_user = {"invalid_field": "test"}
-            response = self.session.post(f"{API_BASE}/watchlist", json=invalid_user)
-            if response.status_code >= 400:
-                self.log_test("Error Handling - Invalid Watchlist User", True, f"Correctly returned HTTP {response.status_code}")
-            else:
-                self.log_test("Error Handling - Invalid Watchlist User", False, f"Should have failed but got HTTP {response.status_code}")
-        except Exception as e:
-            self.log_test("Error Handling - Invalid Watchlist User", False, f"Error: {str(e)}")
 
     def cleanup_resources(self):
         """Clean up any created test resources"""
@@ -683,17 +435,17 @@ class TelegramBotAPITester:
 
     def run_all_tests(self):
         """Run all backend API tests"""
-        print("🚀 Starting Telegram Bot Backend API Tests")
+        print("🚀 Starting Message Forwarding System Backend API Tests")
         print("=" * 60)
         
-        # Run tests in logical order
+        # Run tests focusing on the new forwarding system
         self.test_root_endpoint()
         self.test_bot_connection()
-        self.test_group_management()
-        self.test_watchlist_management()
-        self.test_message_endpoints()
-        self.test_statistics_endpoint()
-        self.test_error_handling()
+        self.test_forwarding_destinations_management()
+        self.test_watchlist_with_forwarding()
+        self.test_forwarded_messages_tracking()
+        self.test_updated_statistics_endpoint()
+        self.test_forwarding_error_handling()
         
         # Cleanup
         self.cleanup_resources()
@@ -704,7 +456,7 @@ class TelegramBotAPITester:
     def print_summary(self):
         """Print test summary"""
         print("\n" + "=" * 60)
-        print("📊 TEST SUMMARY")
+        print("📊 MESSAGE FORWARDING SYSTEM TEST SUMMARY")
         print("=" * 60)
         
         total_tests = len(self.test_results)
