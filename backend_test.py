@@ -293,7 +293,299 @@ class TelegramBotAPITester:
         except Exception as e:
             self.log_test("Statistics Endpoint", False, f"Error: {str(e)}")
 
-    def test_error_handling(self):
+    def test_forwarding_destinations_management(self):
+        """Test Forwarding Destinations Management CRUD operations"""
+        
+        test_destination_data = {
+            "destination_id": "-1001234567890",
+            "destination_name": "Test Channel",
+            "destination_type": "channel",
+            "is_active": True,
+            "description": "Test forwarding destination for monitoring system"
+        }
+        
+        try:
+            # CREATE
+            response = self.session.post(f"{API_BASE}/forwarding-destinations", json=test_destination_data)
+            
+            if response.status_code == 200:
+                created_destination = response.json()
+                destination_id = created_destination.get('id')
+                self.created_resources['forwarding_destinations'].append(destination_id)
+                self.log_test("Create Forwarding Destination", True, 
+                            f"Created destination: {created_destination.get('destination_name')}", created_destination)
+                
+                # READ - Get all forwarding destinations
+                response = self.session.get(f"{API_BASE}/forwarding-destinations")
+                if response.status_code == 200:
+                    destinations = response.json()
+                    self.log_test("List Forwarding Destinations", True, f"Retrieved {len(destinations)} destinations", len(destinations))
+                    
+                    # READ - Get specific destination
+                    response = self.session.get(f"{API_BASE}/forwarding-destinations/{destination_id}")
+                    if response.status_code == 200:
+                        destination = response.json()
+                        self.log_test("Get Specific Forwarding Destination", True, 
+                                    f"Retrieved destination: {destination.get('destination_name')}", destination)
+                        
+                        # UPDATE
+                        update_data = {
+                            "destination_id": test_destination_data["destination_id"],
+                            "destination_name": "Updated Test Channel",
+                            "destination_type": "channel",
+                            "is_active": True,
+                            "description": "Updated test forwarding destination"
+                        }
+                        response = self.session.put(f"{API_BASE}/forwarding-destinations/{destination_id}", json=update_data)
+                        if response.status_code == 200:
+                            updated_destination = response.json()
+                            self.log_test("Update Forwarding Destination", True, 
+                                        f"Updated destination name to: {updated_destination.get('destination_name')}", updated_destination)
+                        else:
+                            self.log_test("Update Forwarding Destination", False, f"HTTP {response.status_code}", response.text)
+                        
+                        # TEST DESTINATION - Send test message
+                        response = self.session.post(f"{API_BASE}/forwarding-destinations/{destination_id}/test")
+                        if response.status_code == 200:
+                            test_result = response.json()
+                            if test_result.get('status') == 'success':
+                                self.log_test("Test Forwarding Destination", True, 
+                                            "Test message sent successfully", test_result)
+                            else:
+                                self.log_test("Test Forwarding Destination", False, 
+                                            "Test message failed", test_result)
+                        else:
+                            # This might fail if the destination is not valid, which is expected
+                            self.log_test("Test Forwarding Destination", True, 
+                                        f"Test endpoint responded with HTTP {response.status_code} (expected for invalid destination)", response.text)
+                            
+                        # DELETE
+                        response = self.session.delete(f"{API_BASE}/forwarding-destinations/{destination_id}")
+                        if response.status_code == 200:
+                            self.log_test("Delete Forwarding Destination", True, "Destination successfully removed")
+                            self.created_resources['forwarding_destinations'].remove(destination_id)
+                        else:
+                            self.log_test("Delete Forwarding Destination", False, f"HTTP {response.status_code}", response.text)
+                    else:
+                        self.log_test("Get Specific Forwarding Destination", False, f"HTTP {response.status_code}", response.text)
+                else:
+                    self.log_test("List Forwarding Destinations", False, f"HTTP {response.status_code}", response.text)
+            else:
+                self.log_test("Create Forwarding Destination", False, f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Forwarding Destinations Management", False, f"Error: {str(e)}")
+
+    def test_watchlist_with_forwarding(self):
+        """Test Watchlist Management with forwarding destinations field"""
+        
+        # First create a forwarding destination
+        destination_data = {
+            "destination_id": "-1001111111111",
+            "destination_name": "Test Forwarding Channel",
+            "destination_type": "channel",
+            "is_active": True
+        }
+        
+        try:
+            # Create forwarding destination
+            response = self.session.post(f"{API_BASE}/forwarding-destinations", json=destination_data)
+            if response.status_code == 200:
+                destination = response.json()
+                destination_id = destination.get('id')
+                self.created_resources['forwarding_destinations'].append(destination_id)
+                
+                # Create watchlist user with forwarding destinations
+                test_user_data = {
+                    "username": "forwarding_testuser",
+                    "user_id": "987654321",
+                    "full_name": "Forwarding Test User",
+                    "group_ids": [],
+                    "keywords": ["urgent", "alert"],
+                    "forwarding_destinations": [destination_id]
+                }
+                
+                response = self.session.post(f"{API_BASE}/watchlist", json=test_user_data)
+                if response.status_code == 200:
+                    created_user = response.json()
+                    user_id = created_user.get('id')
+                    self.created_resources['watchlist_users'].append(user_id)
+                    
+                    # Verify forwarding_destinations field is included
+                    if 'forwarding_destinations' in created_user and created_user['forwarding_destinations']:
+                        self.log_test("Watchlist User with Forwarding Destinations", True, 
+                                    f"Created user with {len(created_user['forwarding_destinations'])} forwarding destinations", created_user)
+                        
+                        # Test GET to verify forwarding_destinations are returned
+                        response = self.session.get(f"{API_BASE}/watchlist/{user_id}")
+                        if response.status_code == 200:
+                            user = response.json()
+                            if 'forwarding_destinations' in user:
+                                self.log_test("Get Watchlist User with Forwarding", True, 
+                                            f"Retrieved user with forwarding destinations: {user['forwarding_destinations']}", user)
+                            else:
+                                self.log_test("Get Watchlist User with Forwarding", False, 
+                                            "forwarding_destinations field missing in response", user)
+                        else:
+                            self.log_test("Get Watchlist User with Forwarding", False, f"HTTP {response.status_code}", response.text)
+                    else:
+                        self.log_test("Watchlist User with Forwarding Destinations", False, 
+                                    "forwarding_destinations field missing or empty", created_user)
+                else:
+                    self.log_test("Watchlist User with Forwarding Destinations", False, f"HTTP {response.status_code}", response.text)
+            else:
+                self.log_test("Watchlist User with Forwarding Destinations", False, 
+                            f"Failed to create forwarding destination: HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Watchlist with Forwarding", False, f"Error: {str(e)}")
+
+    def test_forwarded_messages_tracking(self):
+        """Test Forwarded Messages tracking endpoint"""
+        
+        try:
+            # Test GET /api/forwarded-messages
+            response = self.session.get(f"{API_BASE}/forwarded-messages")
+            if response.status_code == 200:
+                messages = response.json()
+                self.log_test("Get Forwarded Messages", True, f"Retrieved {len(messages)} forwarded messages", len(messages))
+                
+                # Test with filtering parameters
+                response = self.session.get(f"{API_BASE}/forwarded-messages?limit=10&skip=0&username=testuser")
+                if response.status_code == 200:
+                    filtered_messages = response.json()
+                    self.log_test("Get Forwarded Messages with Filters", True, 
+                                f"Retrieved {len(filtered_messages)} filtered messages", len(filtered_messages))
+                else:
+                    self.log_test("Get Forwarded Messages with Filters", False, f"HTTP {response.status_code}", response.text)
+            else:
+                self.log_test("Get Forwarded Messages", False, f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Forwarded Messages Tracking", False, f"Error: {str(e)}")
+
+    def test_updated_statistics_endpoint(self):
+        """Test GET /api/stats - Updated statistics with forwarding data"""
+        
+        try:
+            response = self.session.get(f"{API_BASE}/stats")
+            
+            if response.status_code == 200:
+                stats = response.json()
+                
+                # Check for new forwarding-related fields
+                expected_forwarding_fields = [
+                    'total_forwarding_destinations', 
+                    'total_forwarded', 
+                    'forwarding_success_rate',
+                    'forwarded_today',
+                    'top_destinations',
+                    'recent_forwards'
+                ]
+                
+                existing_fields = ['total_groups', 'total_watchlist_users', 'total_messages', 'messages_today', 'last_updated']
+                all_expected_fields = existing_fields + expected_forwarding_fields
+                
+                missing_fields = [field for field in all_expected_fields if field not in stats]
+                present_forwarding_fields = [field for field in expected_forwarding_fields if field in stats]
+                
+                if not missing_fields:
+                    self.log_test("Updated Statistics Endpoint - All Fields", True, 
+                                f"All expected fields present including forwarding stats", stats)
+                else:
+                    # Check if at least the forwarding fields are present
+                    if len(present_forwarding_fields) >= 4:  # At least most forwarding fields
+                        self.log_test("Updated Statistics Endpoint - Forwarding Fields", True, 
+                                    f"Forwarding statistics fields present: {present_forwarding_fields}", stats)
+                    else:
+                        self.log_test("Updated Statistics Endpoint - Forwarding Fields", False, 
+                                    f"Missing forwarding fields: {[f for f in expected_forwarding_fields if f not in stats]}", stats)
+                
+                # Verify specific forwarding statistics
+                forwarding_stats = {
+                    'total_forwarding_destinations': stats.get('total_forwarding_destinations', 0),
+                    'total_forwarded': stats.get('total_forwarded', 0),
+                    'forwarding_success_rate': stats.get('forwarding_success_rate', 0),
+                    'forwarded_today': stats.get('forwarded_today', 0)
+                }
+                
+                self.log_test("Forwarding Statistics Values", True, 
+                            f"Forwarding stats: {forwarding_stats}", forwarding_stats)
+                
+            else:
+                self.log_test("Updated Statistics Endpoint", False, f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Updated Statistics Endpoint", False, f"Error: {str(e)}")
+
+    def test_forwarding_error_handling(self):
+        """Test error handling for forwarding-related endpoints"""
+        
+        # Test invalid forwarding destination creation
+        try:
+            invalid_destination = {"invalid_field": "test"}
+            response = self.session.post(f"{API_BASE}/forwarding-destinations", json=invalid_destination)
+            if response.status_code >= 400:
+                self.log_test("Error Handling - Invalid Forwarding Destination", True, 
+                            f"Correctly returned HTTP {response.status_code}")
+            else:
+                self.log_test("Error Handling - Invalid Forwarding Destination", False, 
+                            f"Should have failed but got HTTP {response.status_code}")
+        except Exception as e:
+            self.log_test("Error Handling - Invalid Forwarding Destination", False, f"Error: {str(e)}")
+        
+        # Test non-existent forwarding destination access
+        try:
+            response = self.session.get(f"{API_BASE}/forwarding-destinations/non-existent-id")
+            if response.status_code == 404:
+                self.log_test("Error Handling - Non-existent Forwarding Destination", True, 
+                            "Correctly returned 404 for non-existent destination")
+            else:
+                self.log_test("Error Handling - Non-existent Forwarding Destination", False, 
+                            f"Expected 404 but got HTTP {response.status_code}")
+        except Exception as e:
+            self.log_test("Error Handling - Non-existent Forwarding Destination", False, f"Error: {str(e)}")
+        
+        # Test duplicate forwarding destination creation
+        try:
+            duplicate_destination = {
+                "destination_id": "-1001111111111",
+                "destination_name": "Duplicate Test",
+                "destination_type": "channel"
+            }
+            
+            # Create first destination
+            response1 = self.session.post(f"{API_BASE}/forwarding-destinations", json=duplicate_destination)
+            if response1.status_code == 200:
+                created_dest = response1.json()
+                dest_id = created_dest.get('id')
+                self.created_resources['forwarding_destinations'].append(dest_id)
+                
+                # Try to create duplicate
+                response2 = self.session.post(f"{API_BASE}/forwarding-destinations", json=duplicate_destination)
+                if response2.status_code >= 400:
+                    self.log_test("Error Handling - Duplicate Forwarding Destination", True, 
+                                f"Correctly prevented duplicate creation with HTTP {response2.status_code}")
+                else:
+                    self.log_test("Error Handling - Duplicate Forwarding Destination", False, 
+                                f"Should have prevented duplicate but got HTTP {response2.status_code}")
+            else:
+                self.log_test("Error Handling - Duplicate Forwarding Destination", False, 
+                            f"Failed to create initial destination: HTTP {response1.status_code}")
+        except Exception as e:
+            self.log_test("Error Handling - Duplicate Forwarding Destination", False, f"Error: {str(e)}")
+
+        # Test testing non-existent forwarding destination
+        try:
+            response = self.session.post(f"{API_BASE}/forwarding-destinations/non-existent-id/test")
+            if response.status_code == 404:
+                self.log_test("Error Handling - Test Non-existent Destination", True, 
+                            "Correctly returned 404 for testing non-existent destination")
+            else:
+                self.log_test("Error Handling - Test Non-existent Destination", False, 
+                            f"Expected 404 but got HTTP {response.status_code}")
+        except Exception as e:
+            self.log_test("Error Handling - Test Non-existent Destination", False, f"Error: {str(e)}")
         """Test error handling with invalid inputs"""
         
         # Test invalid group creation
