@@ -540,6 +540,13 @@ const WatchlistManager = () => {
     setNewUser({ ...newUser, group_ids: newGroupIds });
   };
 
+  const handleDestinationToggle = (destinationId) => {
+    const newDestinationIds = newUser.forwarding_destinations.includes(destinationId)
+      ? newUser.forwarding_destinations.filter(id => id !== destinationId)
+      : [...newUser.forwarding_destinations, destinationId];
+    setNewUser({ ...newUser, forwarding_destinations: newDestinationIds });
+  };
+
   const handleKeywordsChange = (value) => {
     const keywords = value.split(',').map(k => k.trim()).filter(k => k);
     setNewUser({ ...newUser, keywords });
