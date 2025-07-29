@@ -647,7 +647,7 @@ Use the web dashboard for detailed search\\.
                 """
             
             keyboard = [
-                [InlineKeyboardButton("🌐 Open Dashboard", url="https://9ee19252-a7c1-46fc-8e44-703ba38492ab.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
                 [InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]
             ]
             
@@ -676,7 +676,7 @@ Contact support for issues or questions\\.
             """
             
             keyboard = [
-                [InlineKeyboardButton("🌐 Open Dashboard", url="https://9ee19252-a7c1-46fc-8e44-703ba38492ab.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
                 [InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]
             ]
             
@@ -713,7 +713,7 @@ For full management capabilities, use the web dashboard\\. You can add/remove gr
             """
             
             keyboard = [
-                [InlineKeyboardButton("🌐 Open Dashboard", url="https://9ee19252-a7c1-46fc-8e44-703ba38492ab.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
                 [InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]
             ]
             
@@ -783,7 +783,7 @@ For adding/removing groups and users, please use the web dashboard where you hav
             """
             
             keyboard = [
-                [InlineKeyboardButton("🌐 Open Dashboard", url="https://9ee19252-a7c1-46fc-8e44-703ba38492ab.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
                 [InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_menu")]
             ]
             
@@ -1453,7 +1453,7 @@ async def stop_bot_polling():
 @api_router.post("/telegram/set-webhook")
 async def set_webhook():
     """Set webhook for production mode"""
-    webhook_url = f"https://9ee19252-a7c1-46fc-8e44-703ba38492ab.preview.emergentagent.com/api/telegram/webhook/{os.environ.get('WEBHOOK_SECRET')}"
+    webhook_url = f"https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com/api/telegram/webhook/{os.environ.get('WEBHOOK_SECRET')}"
     
     try:
         # Stop polling if running
