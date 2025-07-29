@@ -51,7 +51,86 @@ app = FastAPI()
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-# ================== PYDANTIC MODELS ==================
+# ================== ENUMS & TYPES ==================
+
+class UserRole(str, Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    VIEWER = "viewer"
+
+class OrganizationPlan(str, Enum):
+    FREE = "free"
+    PRO = "pro"
+    ENTERPRISE = "enterprise"
+
+# ================== AUTHENTICATION MODELS ==================
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+    organization_name: Optional[str] = None  # For creating new org during registration
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    full_name: str
+    is_active: bool
+    role: UserRole
+    organization_id: str
+    created_at: datetime
+    last_login: Optional[datetime] = None
+
+class User(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    email: str
+    password_hash: str
+    full_name: str
+    is_active: bool = True
+    role: UserRole = UserRole.VIEWER
+    organization_id: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    last_login: Optional[datetime] = None
+    email_verified: bool = False
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: UserResponse
+
+class OrganizationCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    plan: OrganizationPlan = OrganizationPlan.FREE
+
+class Organization(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    description: Optional[str] = None
+    plan: OrganizationPlan = OrganizationPlan.FREE
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    usage_stats: Dict[str, int] = Field(default_factory=lambda: {
+        "total_groups": 0,
+        "total_users": 0,
+        "total_messages": 0,
+        "total_forwarded": 0
+    })
+
+class UserInvite(BaseModel):
+    email: EmailStr
+    role: UserRole
+    full_name: str
+
+# ================== PYDANTIC MODELS (Updated with tenant_id) ==================
 
 class GroupCreate(BaseModel):
     group_id: str
