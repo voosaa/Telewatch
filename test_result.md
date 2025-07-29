@@ -486,6 +486,7 @@ metadata:
 
 test_plan:
   current_focus:
+    - "Multi-tenant Authentication System Testing Complete"
     - "Message Forwarding System Testing Complete"
   stuck_tasks: []
   test_all: false
