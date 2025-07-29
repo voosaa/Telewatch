@@ -525,13 +525,29 @@ const WatchlistManager = () => {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Watchlist Management</h1>
         <button
-          onClick={() => setShowAddForm(true)}
+          onClick={() => {
+            setShowAddForm(true);
+            setErrorMessage('');
+            setSuccessMessage('');
+          }}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
           Add User
         </button>
       </div>
+
+      {/* Success/Error Messages */}
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+          ✅ {successMessage}
+        </div>
+      )}
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
+          ❌ {errorMessage}
+        </div>
+      )}
 
       {/* Add User Form */}
       {showAddForm && (
