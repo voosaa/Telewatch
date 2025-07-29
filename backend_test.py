@@ -43,7 +43,8 @@ class TelegramBotAPITester:
         self.test_results = []
         self.created_resources = {
             'groups': [],
-            'watchlist_users': []
+            'watchlist_users': [],
+            'forwarding_destinations': []
         }
 
     def log_test(self, test_name: str, success: bool, details: str = "", response_data: Any = None):
