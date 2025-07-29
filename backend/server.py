@@ -1118,13 +1118,22 @@ async def get_statistics():
     stats = {
         "total_groups": await db.groups.count_documents({"is_active": True}),
         "total_watchlist_users": await db.watchlist_users.count_documents({"is_active": True}),
+        "total_forwarding_destinations": await db.forwarding_destinations.count_documents({"is_active": True}),
         "total_messages": await db.message_logs.count_documents({}),
         "total_forwarded": await db.message_logs.count_documents({"is_forwarded": True}),
+        "forwarding_success_rate": 0,
         "messages_today": await db.message_logs.count_documents({
             "timestamp": {"$gte": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)}
         }),
+        "forwarded_today": await db.forwarded_messages.count_documents({
+            "forwarded_at": {"$gte": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)}
+        }),
         "last_updated": datetime.now(timezone.utc)
     }
+    
+    # Calculate forwarding success rate
+    if stats["total_messages"] > 0:
+        stats["forwarding_success_rate"] = round((stats["total_forwarded"] / stats["total_messages"]) * 100, 1)
     
     # Get top active users
     pipeline = [
@@ -1142,6 +1151,28 @@ async def get_statistics():
     ]
     message_types = await db.message_logs.aggregate(pipeline).to_list(10)
     stats["message_types"] = message_types
+    
+    # Get forwarding destinations statistics
+    pipeline = [
+        {"$match": {"is_active": True}},
+        {"$project": {"destination_name": 1, "message_count": 1, "last_forwarded": 1}},
+        {"$sort": {"message_count": -1}},
+        {"$limit": 10}
+    ]
+    top_destinations = await db.forwarding_destinations.aggregate(pipeline).to_list(10)
+    stats["top_destinations"] = top_destinations
+    
+    # Get recent forwarding activity
+    recent_forwards = await db.forwarded_messages.find().sort("forwarded_at", -1).limit(5).to_list(5)
+    stats["recent_forwards"] = [
+        {
+            "username": msg["from_username"],
+            "group_name": msg["from_group_name"],
+            "forwarded_at": msg["forwarded_at"],
+            "destination_count": len(msg["forwarded_to_destinations"])
+        }
+        for msg in recent_forwards
+    ]
     
     return stats
 
