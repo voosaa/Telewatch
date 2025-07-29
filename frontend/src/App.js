@@ -45,6 +45,7 @@ const Sidebar = ({ activeTab, setActiveTab, user, organization, logout }) => {
     { id: 'messages', label: 'Messages', icon: MessageSquare, roles: ['owner', 'admin', 'viewer'] },
     { id: 'bot', label: 'Bot Status', icon: Bot, roles: ['owner', 'admin', 'viewer'] },
     { id: 'users', label: 'Team', icon: UserCog, roles: ['owner', 'admin'] },
+    { id: 'subscription', label: 'Subscription', icon: CreditCard, roles: ['owner', 'admin'] },
     { id: 'org-settings', label: 'Organization', icon: Building, roles: ['owner', 'admin'] },
     { id: 'settings', label: 'Settings', icon: Settings, roles: ['owner', 'admin', 'viewer'] },
   ];
