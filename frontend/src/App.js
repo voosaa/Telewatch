@@ -1036,7 +1036,7 @@ const MainApp = () => {
       case 'bot':
         return <BotStatus />;
       case 'settings':
-        return <Settings />;
+        return <SettingsPage />;
       default:
         return <Dashboard />;
     }
