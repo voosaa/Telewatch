@@ -468,6 +468,7 @@ const WatchlistManager = () => {
   useEffect(() => {
     fetchUsers();
     fetchGroups();
+    fetchDestinations();
   }, []);
 
   const fetchUsers = async () => {
@@ -487,6 +488,15 @@ const WatchlistManager = () => {
       setGroups(response.data);
     } catch (error) {
       console.error('Error fetching groups:', error);
+    }
+  };
+
+  const fetchDestinations = async () => {
+    try {
+      const response = await axios.get(`${API}/forwarding-destinations`);
+      setDestinations(response.data);
+    } catch (error) {
+      console.error('Error fetching destinations:', error);
     }
   };
 
