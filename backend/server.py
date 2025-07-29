@@ -166,6 +166,43 @@ async def check_keyword_match(message_text: str, keywords: List[str]) -> List[st
 
 # ================== TELEGRAM BOT HANDLERS ==================
 
+async def handle_callback_query(callback_query) -> None:
+    """Handle callback queries (button clicks)"""
+    try:
+        query_id = callback_query.id
+        chat_id = str(callback_query.message.chat_id)
+        user_id = str(callback_query.from_user.id)
+        username = callback_query.from_user.username or ""
+        data = callback_query.data
+        
+        logger.info(f"Callback query from @{username} (ID: {user_id}) in chat {chat_id}: {data}")
+        
+        # Answer the callback query to remove loading state
+        await bot.answer_callback_query(callback_query_id=query_id)
+        
+        # Handle different callback data
+        if data.startswith("confirm_"):
+            await bot.send_message(
+                chat_id=chat_id,
+                text="✅ Action confirmed!",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        elif data.startswith("cancel_"):
+            await bot.send_message(
+                chat_id=chat_id,
+                text="❌ Action cancelled!",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await bot.send_message(
+                chat_id=chat_id,
+                text="Unknown action\\.",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            
+    except Exception as e:
+        logger.error(f"Error handling callback query: {e}", exc_info=True)
+
 async def handle_telegram_message(update: Update) -> None:
     """Process incoming Telegram messages"""
     try:
