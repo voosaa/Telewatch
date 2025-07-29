@@ -525,7 +525,8 @@ class MultiTenantAPITester:
                     self.log_test("RBAC - Owner Invite Users", True, 
                                 "Owner can invite users", admin_data)
                     
-
+                    # Test Owner can update user roles
+                    response = self.session.put(f"{API_BASE}/users/{admin_user_id}/role?new_role=viewer")
                     if response.status_code == 200:
                         self.log_test("RBAC - Owner Update Roles", True, 
                                     "Owner can update user roles")
