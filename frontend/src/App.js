@@ -723,6 +723,264 @@ const WatchlistManager = () => {
   );
 };
 
+const ForwardingManager = () => {
+  const [destinations, setDestinations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [newDestination, setNewDestination] = useState({
+    destination_id: '',
+    destination_name: '',
+    destination_type: 'channel',
+    description: ''
+  });
+
+  useEffect(() => {
+    fetchDestinations();
+  }, []);
+
+  const fetchDestinations = async () => {
+    try {
+      const response = await axios.get(`${API}/forwarding-destinations`);
+      setDestinations(response.data);
+    } catch (error) {
+      console.error('Error fetching destinations:', error);
+      setErrorMessage('Failed to load destinations: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddDestination = async (e) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+    
+    try {
+      const response = await axios.post(`${API}/forwarding-destinations`, newDestination);
+      setNewDestination({ destination_id: '', destination_name: '', destination_type: 'channel', description: '' });
+      setShowAddForm(false);
+      setSuccessMessage(`Destination "${response.data.destination_name}" added successfully!`);
+      fetchDestinations();
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      console.error('Error adding destination:', error);
+      const errorMsg = error.response?.data?.detail || error.message;
+      setErrorMessage(`Failed to add destination: ${errorMsg}`);
+    }
+  };
+
+  const handleDeleteDestination = async (destinationId) => {
+    if (window.confirm('Are you sure you want to remove this forwarding destination?')) {
+      try {
+        await axios.delete(`${API}/forwarding-destinations/${destinationId}`);
+        setSuccessMessage('Destination removed successfully!');
+        fetchDestinations();
+        setTimeout(() => setSuccessMessage(''), 3000);
+      } catch (error) {
+        console.error('Error deleting destination:', error);
+        setErrorMessage('Failed to delete destination: ' + (error.response?.data?.detail || error.message));
+      }
+    }
+  };
+
+  const handleTestDestination = async (destinationId, destinationName) => {
+    try {
+      await axios.post(`${API}/forwarding-destinations/${destinationId}/test`);
+      setSuccessMessage(`Test message sent to "${destinationName}" successfully!`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      console.error('Error testing destination:', error);
+      setErrorMessage(`Failed to test "${destinationName}": ` + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-gray-900">Forwarding Destinations</h1>
+        <button
+          onClick={() => {
+            setShowAddForm(true);
+            setErrorMessage('');
+            setSuccessMessage('');
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Destination
+        </button>
+      </div>
+
+      {/* Success/Error Messages */}
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+          ✅ {successMessage}
+        </div>
+      )}
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
+          ❌ {errorMessage}
+        </div>
+      )}
+
+      {/* Info Box */}
+      <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg">
+        <p className="text-sm">
+          <strong>ℹ️ How to get Chat/Channel IDs:</strong> Add your bot to the channel/group as admin, then forward a message 
+          from that channel to @userinfobot to get the Chat ID (it will be negative for groups/channels).
+        </p>
+      </div>
+
+      {/* Add Destination Form */}
+      {showAddForm && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Forwarding Destination</h3>
+          <form onSubmit={handleAddDestination} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Destination ID *
+                </label>
+                <input
+                  type="text"
+                  value={newDestination.destination_id}
+                  onChange={(e) => setNewDestination({ ...newDestination, destination_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  placeholder="-1001234567890"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">Chat ID of the channel/group (negative for channels/groups)</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Destination Name *
+                </label>
+                <input
+                  type="text"
+                  value={newDestination.destination_name}
+                  onChange={(e) => setNewDestination({ ...newDestination, destination_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                  placeholder="My Alert Channel"
+                  required
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Destination Type
+                </label>
+                <select
+                  value={newDestination.destination_type}
+                  onChange={(e) => setNewDestination({ ...newDestination, destination_type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                >
+                  <option value="channel">Channel</option>
+                  <option value="group">Group</option>
+                  <option value="user">User</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                value={newDestination.description}
+                onChange={(e) => setNewDestination({ ...newDestination, description: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                rows="3"
+                placeholder="Description of this forwarding destination..."
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Add Destination
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddForm(false)}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Destinations List */}
+      <div className="bg-white rounded-lg shadow-md">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Forwarding Destinations ({destinations.length})</h3>
+        </div>
+        <div className="divide-y divide-gray-200">
+          {loading ? (
+            <div className="p-6 text-center">
+              <RefreshCw className="w-6 h-6 animate-spin text-blue-500 mx-auto" />
+            </div>
+          ) : destinations.length === 0 ? (
+            <div className="p-6 text-center text-gray-500">
+              No forwarding destinations configured. Add destinations to start forwarding monitored messages.
+            </div>
+          ) : (
+            destinations.map((destination) => (
+              <div key={destination.id} className="p-6 hover:bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h4 className="text-lg font-medium text-gray-900">{destination.destination_name}</h4>
+                      <span className="px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
+                        {destination.destination_type}
+                      </span>
+                    </div>
+                    <p className="text-gray-600 text-sm">ID: {destination.destination_id}</p>
+                    {destination.description && (
+                      <p className="text-gray-600 text-sm mt-1">{destination.description}</p>
+                    )}
+                    <div className="flex items-center gap-4 mt-2">
+                      <p className="text-gray-400 text-xs">
+                        Messages forwarded: {destination.message_count || 0}
+                      </p>
+                      {destination.last_forwarded && (
+                        <p className="text-gray-400 text-xs">
+                          Last used: {new Date(destination.last_forwarded).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-gray-400 text-xs mt-1">
+                      Added: {new Date(destination.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleTestDestination(destination.id, destination.destination_name)}
+                      className="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-sm"
+                    >
+                      Test
+                    </button>
+                    <button
+                      onClick={() => handleDeleteDestination(destination.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const MessagesViewer = () => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
