@@ -169,8 +169,11 @@ async def check_keyword_match(message_text: str, keywords: List[str]) -> List[st
 async def handle_telegram_message(update: Update) -> None:
     """Process incoming Telegram messages"""
     try:
+        logger.info(f"Processing telegram update: {update.update_id}")
+        
         message = update.message
         if not message:
+            logger.info("No message in update, skipping")
             return
         
         # Extract message info
@@ -179,6 +182,8 @@ async def handle_telegram_message(update: Update) -> None:
         username = message.from_user.username or ""
         full_name = f"{message.from_user.first_name or ''} {message.from_user.last_name or ''}".strip()
         message_text = message.text or message.caption or ""
+        
+        logger.info(f"Message from @{username} (ID: {user_id}) in chat {chat_id}: {message_text[:100]}...")
         
         # Determine message type
         message_type = "text"
@@ -205,27 +210,36 @@ async def handle_telegram_message(update: Update) -> None:
         
         # Check if it's a bot command
         if message_text.startswith('/'):
+            logger.info(f"Processing bot command: {message_text}")
             await handle_bot_command(message)
             return
         
         # Check if group is monitored
         group_doc = await db.groups.find_one({"group_id": chat_id, "is_active": True})
         if not group_doc:
+            logger.info(f"Chat {chat_id} is not in monitored groups, ignoring message")
             return
         
         group = Group(**group_doc)
+        logger.info(f"Message in monitored group: {group.group_name}")
         
         # Check if user is in watchlist
         monitored_user = await check_if_user_monitored(user_id, username, chat_id)
         if not monitored_user:
+            logger.info(f"User @{username} is not in watchlist, ignoring message")
             return
+        
+        logger.info(f"Message from monitored user @{username} detected!")
         
         # Check keyword matching if specified
         matched_keywords = []
         if monitored_user.keywords:
             matched_keywords = await check_keyword_match(message_text, monitored_user.keywords)
             if not matched_keywords:
+                logger.info(f"No keyword matches found for user @{username}, ignoring message")
                 return  # No keyword match, don't forward
+        
+        logger.info(f"Message will be logged with keywords: {matched_keywords}")
         
         # Log the message
         message_log = MessageLog(
@@ -246,10 +260,10 @@ async def handle_telegram_message(update: Update) -> None:
         # Forward the message (for now, we'll implement this later)
         # This would forward to designated channels/groups
         
-        logging.info(f"Logged message from monitored user {username} in group {group.group_name}")
+        logger.info(f"✅ Successfully logged message from monitored user {username} in group {group.group_name}")
         
     except Exception as e:
-        logging.error(f"Error handling Telegram message: {e}")
+        logger.error(f"❌ Error handling Telegram message: {e}", exc_info=True)
 
 async def handle_bot_command(message) -> None:
     """Handle bot commands"""
