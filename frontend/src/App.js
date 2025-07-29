@@ -193,6 +193,8 @@ const GroupsManager = () => {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [newGroup, setNewGroup] = useState({
     group_id: '',
     group_name: '',
@@ -211,6 +213,7 @@ const GroupsManager = () => {
       setGroups(response.data);
     } catch (error) {
       console.error('Error fetching groups:', error);
+      setErrorMessage('Failed to load groups: ' + (error.response?.data?.detail || error.message));
     } finally {
       setLoading(false);
     }
@@ -218,14 +221,21 @@ const GroupsManager = () => {
 
   const handleAddGroup = async (e) => {
     e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+    
     try {
-      await axios.post(`${API}/groups`, newGroup);
+      const response = await axios.post(`${API}/groups`, newGroup);
       setNewGroup({ group_id: '', group_name: '', group_type: 'group', invite_link: '', description: '' });
       setShowAddForm(false);
+      setSuccessMessage(`Group "${response.data.group_name}" added successfully!`);
       fetchGroups();
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
       console.error('Error adding group:', error);
-      alert('Error adding group: ' + (error.response?.data?.detail || error.message));
+      const errorMsg = error.response?.data?.detail || error.message;
+      setErrorMessage(`Failed to add group: ${errorMsg}`);
     }
   };
 
@@ -233,10 +243,12 @@ const GroupsManager = () => {
     if (window.confirm('Are you sure you want to remove this group from monitoring?')) {
       try {
         await axios.delete(`${API}/groups/${groupId}`);
+        setSuccessMessage('Group removed successfully!');
         fetchGroups();
+        setTimeout(() => setSuccessMessage(''), 3000);
       } catch (error) {
         console.error('Error deleting group:', error);
-        alert('Error deleting group: ' + (error.response?.data?.detail || error.message));
+        setErrorMessage('Failed to delete group: ' + (error.response?.data?.detail || error.message));
       }
     }
   };
