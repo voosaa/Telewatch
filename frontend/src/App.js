@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import AuthWrapper from "./components/auth/AuthWrapper";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import OrganizationSettings from "./components/organization/OrganizationSettings";
