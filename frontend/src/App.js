@@ -451,6 +451,7 @@ const GroupsManager = () => {
 const WatchlistManager = () => {
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [destinations, setDestinations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -460,7 +461,8 @@ const WatchlistManager = () => {
     user_id: '',
     full_name: '',
     group_ids: [],
-    keywords: []
+    keywords: [],
+    forwarding_destinations: []
   });
 
   useEffect(() => {
