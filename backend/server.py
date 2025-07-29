@@ -59,12 +59,32 @@ class Group(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+class ForwardingDestinationCreate(BaseModel):
+    destination_id: str  # Chat/Channel ID where messages will be forwarded
+    destination_name: str
+    destination_type: str = "channel"  # channel, group, user
+    is_active: bool = True
+    description: Optional[str] = None
+
+class ForwardingDestination(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    destination_id: str
+    destination_name: str
+    destination_type: str
+    is_active: bool = True
+    description: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    message_count: int = 0  # Track forwarded messages
+    last_forwarded: Optional[datetime] = None
+
 class WatchlistUserCreate(BaseModel):
     username: str
     user_id: Optional[str] = None
     full_name: Optional[str] = None
     group_ids: List[str] = []  # Empty means monitor globally
     keywords: List[str] = []  # Optional keyword filtering
+    forwarding_destinations: List[str] = []  # IDs of forwarding destinations
 
 class WatchlistUser(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -73,6 +93,7 @@ class WatchlistUser(BaseModel):
     full_name: Optional[str] = None
     group_ids: List[str] = []
     keywords: List[str] = []
+    forwarding_destinations: List[str] = []  # IDs of forwarding destinations
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -88,9 +109,11 @@ class ForwardedMessage(BaseModel):
     message_text: Optional[str] = None
     message_type: str  # text, photo, video, document, etc.
     media_info: Optional[Dict[str, Any]] = None
-    forward_to_groups: List[str] = []
+    forwarded_to_destinations: List[str] = []  # IDs of destinations where forwarded
     forwarded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     matched_keywords: List[str] = []
+    forwarding_status: str = "success"  # success, failed, partial
+    error_details: Optional[str] = None
 
 class MessageLog(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -105,6 +128,7 @@ class MessageLog(BaseModel):
     media_info: Optional[Dict[str, Any]] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_forwarded: bool = False
+    forwarded_count: int = 0  # Number of destinations forwarded to
     matched_keywords: List[str] = []
 
 class BotCommand(BaseModel):
