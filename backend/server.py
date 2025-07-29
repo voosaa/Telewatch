@@ -237,7 +237,82 @@ class BotCommand(BaseModel):
     username: Optional[str] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-# ================== UTILITY FUNCTIONS ==================
+# ================== AUTHENTICATION UTILITIES ==================
+
+def hash_password(password: str) -> str:
+    """Hash password using bcrypt"""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify password against hash"""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+def create_access_token(user_id: str, organization_id: str, role: str) -> str:
+    """Create JWT access token"""
+    expires = datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
+    payload = {
+        "sub": user_id,
+        "org": organization_id,
+        "role": role,
+        "exp": expires,
+        "iat": datetime.utcnow()
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
+    """Get current authenticated user"""
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        
+        user_id = payload.get("sub")
+        organization_id = payload.get("org")
+        role = payload.get("role")
+        
+        if not user_id or not organization_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # Verify user exists and is active
+        user_doc = await db.users.find_one({"id": user_id, "is_active": True})
+        if not user_doc:
+            raise HTTPException(status_code=401, detail="User not found or inactive")
+        
+        return {
+            "user_id": user_id,
+            "organization_id": organization_id,
+            "role": UserRole(role),
+            "user": User(**user_doc)
+        }
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+async def get_current_active_user(current_user: Dict = Depends(get_current_user)) -> Dict[str, Any]:
+    """Get current active user with additional checks"""
+    user = current_user["user"]
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="Inactive user")
+    return current_user
+
+def require_role(required_roles: List[UserRole]):
+    """Decorator to require specific roles"""
+    def role_checker(current_user: Dict = Depends(get_current_active_user)) -> Dict[str, Any]:
+        if current_user["role"] not in required_roles:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Required roles: {[role.value for role in required_roles]}"
+            )
+        return current_user
+    return role_checker
+
+# Role-based dependencies
+require_owner = require_role([UserRole.OWNER])
+require_admin = require_role([UserRole.OWNER, UserRole.ADMIN])
+require_any_role = require_role([UserRole.OWNER, UserRole.ADMIN, UserRole.VIEWER])
+
+# ================== UTILITY FUNCTIONS (Updated for Multi-tenancy) ==================
 
 def escape_markdown_v2(text: str) -> str:
     """Escape special characters for MarkdownV2"""
