@@ -28,3 +28,6 @@ telethon>=1.35.0
 httpx>=0.27.0
 asyncio-mqtt>=0.16.0
 aiofiles>=24.1.0
+bcrypt>=4.0.1
+fastapi-users>=13.0.0
+fastapi-users-db-mongodb>=2.0.0
