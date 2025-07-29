@@ -1748,40 +1748,6 @@ async def deactivate_user(
     
     return {"message": "User deactivated successfully"}
 
-# ================== UPDATED API ROUTES (With Multi-tenancy) ==================
-
-# Group Management Routes (Updated)
-@api_router.post("/groups", response_model=Group)
-async def create_group(group: GroupCreate, current_user: Dict = Depends(require_admin)):
-    """Add a new group to monitor (Admin/Owner only)"""
-    try:
-        # Check if group already exists for this tenant
-        existing = await db.groups.find_one({
-            "tenant_id": current_user["organization_id"],
-            "group_id": group.group_id
-        })
-        if existing:
-            raise HTTPException(status_code=400, detail="Group already exists")
-        
-        new_group = Group(
-            tenant_id=current_user["organization_id"],
-            created_by=current_user["user_id"],
-            **group.dict()
-        )
-        await db.groups.insert_one(new_group.dict())
-        return new_group
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create group: {str(e)}")
-
-@api_router.get("/groups", response_model=List[Group])
-async def get_groups(current_user: Dict = Depends(get_current_active_user)):
-    """Get all monitored groups for current organization"""
-    groups = await db.groups.find({
-        "tenant_id": current_user["organization_id"],
-        "is_active": True
-    }).to_list(100)
-    return [Group(**group) for group in groups]
-
 # Test Routes
 @api_router.get("/")
 async def root():
