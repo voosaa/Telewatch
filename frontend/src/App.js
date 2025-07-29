@@ -649,6 +649,29 @@ const WatchlistManager = () => {
                 ))}
               </div>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Forwarding Destinations (where to forward messages from this user)
+              </label>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {destinations.length === 0 ? (
+                  <p className="text-sm text-gray-500">No forwarding destinations available. Add destinations in the Forwarding tab first.</p>
+                ) : (
+                  destinations.map((destination) => (
+                    <label key={destination.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={newUser.forwarding_destinations.includes(destination.id)}
+                        onChange={() => handleDestinationToggle(destination.id)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm">{destination.destination_name} ({destination.destination_type})</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Select where to forward messages from this user</p>
+            </div>
             <div className="flex gap-3">
               <button
                 type="submit"
