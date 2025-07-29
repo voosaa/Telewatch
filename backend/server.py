@@ -600,24 +600,113 @@ async def get_statistics():
     
     return stats
 
+# Telegram polling function
+async def start_polling():
+    """Start polling for Telegram updates as a fallback"""
+    global last_update_id, polling_task
+    
+    try:
+        logger.info("Starting Telegram polling...")
+        while True:
+            try:
+                updates = await bot.get_updates(offset=last_update_id + 1, timeout=30)
+                
+                for update in updates:
+                    try:
+                        last_update_id = update.update_id
+                        logger.info(f"Processing update {update.update_id} from polling")
+                        await handle_telegram_message(update)
+                    except Exception as e:
+                        logger.error(f"Error processing polling update {update.update_id}: {e}")
+                        
+            except Exception as e:
+                logger.error(f"Polling error: {e}")
+                await asyncio.sleep(5)  # Wait before retrying
+                
+    except asyncio.CancelledError:
+        logger.info("Polling task cancelled")
+    except Exception as e:
+        logger.error(f"Polling task failed: {e}")
+
 # Telegram Webhook Route
 @api_router.post("/telegram/webhook/{secret}")
 async def telegram_webhook(secret: str, request: Request, background_tasks: BackgroundTasks):
     """Handle Telegram webhook updates"""
+    logger.info(f"Webhook called with secret: {secret[:10]}...")
+    
     if secret != os.environ.get('WEBHOOK_SECRET'):
+        logger.warning(f"Invalid webhook secret provided: {secret[:10]}...")
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
     
     try:
         update_data = await request.json()
+        logger.info(f"Received webhook data: {json.dumps(update_data, indent=2)}")
+        
         update = Update.de_json(update_data, bot)
+        logger.info(f"Parsed update: {update.update_id}")
         
         # Process in background to avoid blocking
         background_tasks.add_task(handle_telegram_message, update)
         
         return {"status": "ok"}
     except Exception as e:
-        logging.error(f"Webhook processing failed: {e}")
+        logger.error(f"Webhook processing failed: {e}")
         raise HTTPException(status_code=500, detail=f"Webhook processing failed: {str(e)}")
+
+# Control Routes for Bot Management
+@api_router.post("/telegram/start-polling")
+async def start_bot_polling():
+    """Start polling mode (useful for development)"""
+    global polling_task
+    
+    if polling_task and not polling_task.done():
+        return {"status": "already_running", "message": "Polling is already active"}
+    
+    # Stop webhook first
+    try:
+        await bot.delete_webhook()
+        logger.info("Webhook deleted, starting polling mode")
+        
+        polling_task = asyncio.create_task(start_polling())
+        return {"status": "started", "message": "Polling mode started"}
+    except Exception as e:
+        logger.error(f"Failed to start polling: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start polling: {str(e)}")
+
+@api_router.post("/telegram/stop-polling")
+async def stop_bot_polling():
+    """Stop polling mode"""
+    global polling_task
+    
+    if polling_task and not polling_task.done():
+        polling_task.cancel()
+        try:
+            await polling_task
+        except asyncio.CancelledError:
+            pass
+        
+        return {"status": "stopped", "message": "Polling mode stopped"}
+    
+    return {"status": "not_running", "message": "Polling was not active"}
+
+@api_router.post("/telegram/set-webhook")
+async def set_webhook():
+    """Set webhook for production mode"""
+    webhook_url = f"https://9ee19252-a7c1-46fc-8e44-703ba38492ab.preview.emergentagent.com/api/telegram/webhook/{os.environ.get('WEBHOOK_SECRET')}"
+    
+    try:
+        # Stop polling if running
+        global polling_task
+        if polling_task and not polling_task.done():
+            polling_task.cancel()
+        
+        await bot.set_webhook(url=webhook_url)
+        logger.info(f"Webhook set to: {webhook_url}")
+        
+        return {"status": "success", "webhook_url": webhook_url}
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to set webhook: {str(e)}")
 
 # Test Routes
 @api_router.get("/")
