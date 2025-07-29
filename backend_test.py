@@ -669,6 +669,17 @@ class TelegramBotAPITester:
                     print(f"⚠️  Failed to clean up watchlist user: {user_id}")
             except Exception as e:
                 print(f"❌ Error cleaning up watchlist user {user_id}: {e}")
+        
+        # Clean up forwarding destinations
+        for dest_id in self.created_resources['forwarding_destinations']:
+            try:
+                response = self.session.delete(f"{API_BASE}/forwarding-destinations/{dest_id}")
+                if response.status_code == 200:
+                    print(f"✅ Cleaned up forwarding destination: {dest_id}")
+                else:
+                    print(f"⚠️  Failed to clean up forwarding destination: {dest_id}")
+            except Exception as e:
+                print(f"❌ Error cleaning up forwarding destination {dest_id}: {e}")
 
     def run_all_tests(self):
         """Run all backend API tests"""
