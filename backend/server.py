@@ -959,6 +959,112 @@ async def delete_watchlist_user(user_id: str):
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User removed from watchlist"}
 
+# Forwarding Destinations Routes
+@api_router.post("/forwarding-destinations", response_model=ForwardingDestination)
+async def create_forwarding_destination(destination: ForwardingDestinationCreate):
+    """Add a new forwarding destination"""
+    try:
+        # Check if destination already exists
+        existing = await db.forwarding_destinations.find_one({"destination_id": destination.destination_id})
+        if existing:
+            raise HTTPException(status_code=400, detail="Forwarding destination already exists")
+        
+        new_destination = ForwardingDestination(**destination.dict())
+        await db.forwarding_destinations.insert_one(new_destination.dict())
+        return new_destination
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create forwarding destination: {str(e)}")
+
+@api_router.get("/forwarding-destinations", response_model=List[ForwardingDestination])
+async def get_forwarding_destinations():
+    """Get all forwarding destinations"""
+    destinations = await db.forwarding_destinations.find({"is_active": True}).to_list(100)
+    return [ForwardingDestination(**dest) for dest in destinations]
+
+@api_router.get("/forwarding-destinations/{destination_id}", response_model=ForwardingDestination)
+async def get_forwarding_destination(destination_id: str):
+    """Get specific forwarding destination"""
+    destination = await db.forwarding_destinations.find_one({"id": destination_id})
+    if not destination:
+        raise HTTPException(status_code=404, detail="Forwarding destination not found")
+    return ForwardingDestination(**destination)
+
+@api_router.put("/forwarding-destinations/{destination_id}", response_model=ForwardingDestination)
+async def update_forwarding_destination(destination_id: str, destination_update: ForwardingDestinationCreate):
+    """Update forwarding destination"""
+    destination = await db.forwarding_destinations.find_one({"id": destination_id})
+    if not destination:
+        raise HTTPException(status_code=404, detail="Forwarding destination not found")
+    
+    update_data = destination_update.dict()
+    update_data["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.forwarding_destinations.update_one({"id": destination_id}, {"$set": update_data})
+    updated_destination = await db.forwarding_destinations.find_one({"id": destination_id})
+    return ForwardingDestination(**updated_destination)
+
+@api_router.delete("/forwarding-destinations/{destination_id}")
+async def delete_forwarding_destination(destination_id: str):
+    """Remove forwarding destination"""
+    result = await db.forwarding_destinations.update_one(
+        {"id": destination_id}, 
+        {"$set": {"is_active": False, "updated_at": datetime.now(timezone.utc)}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Forwarding destination not found")
+    return {"message": "Forwarding destination removed"}
+
+@api_router.post("/forwarding-destinations/{destination_id}/test")
+async def test_forwarding_destination(destination_id: str):
+    """Test a forwarding destination by sending a test message"""
+    destination = await db.forwarding_destinations.find_one({"id": destination_id})
+    if not destination:
+        raise HTTPException(status_code=404, detail="Forwarding destination not found")
+    
+    dest_obj = ForwardingDestination(**destination)
+    
+    try:
+        test_message = f"""
+🧪 *Test Message*
+
+This is a test message from your Telegram Monitor Bot\\.
+
+*Destination:* {escape_markdown_v2(dest_obj.destination_name)}
+*Type:* {escape_markdown_v2(dest_obj.destination_type.title())}
+*Time:* {escape_markdown_v2(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))}
+
+If you see this message, the forwarding destination is working correctly\\! ✅
+        """
+        
+        await bot.send_message(
+            chat_id=dest_obj.destination_id,
+            text=test_message,
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        
+        return {"status": "success", "message": "Test message sent successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to send test message: {str(e)}")
+
+# Forwarded Messages Routes
+@api_router.get("/forwarded-messages", response_model=List[ForwardedMessage])
+async def get_forwarded_messages(
+    limit: int = 50,
+    skip: int = 0,
+    username: Optional[str] = None,
+    destination_id: Optional[str] = None
+):
+    """Get forwarded messages with filtering"""
+    query = {}
+    if username:
+        query["from_username"] = {"$regex": username, "$options": "i"}
+    if destination_id:
+        query["forwarded_to_destinations"] = {"$in": [destination_id]}
+    
+    messages = await db.forwarded_messages.find(query).sort("forwarded_at", -1).skip(skip).limit(limit).to_list(limit)
+    return [ForwardedMessage(**msg) for msg in messages]
+
 # Message Logs Routes
 @api_router.get("/messages", response_model=List[MessageLog])
 async def get_message_logs(
