@@ -609,6 +609,30 @@ class TelegramBotAPITester:
         except Exception as e:
             self.log_test("Error Handling - Non-existent Group", False, f"Error: {str(e)}")
         
+    def test_error_handling(self):
+        """Test error handling with invalid inputs"""
+        
+        # Test invalid group creation
+        try:
+            invalid_group = {"invalid_field": "test"}
+            response = self.session.post(f"{API_BASE}/groups", json=invalid_group)
+            if response.status_code >= 400:
+                self.log_test("Error Handling - Invalid Group Creation", True, f"Correctly returned HTTP {response.status_code}")
+            else:
+                self.log_test("Error Handling - Invalid Group Creation", False, f"Should have failed but got HTTP {response.status_code}")
+        except Exception as e:
+            self.log_test("Error Handling - Invalid Group Creation", False, f"Error: {str(e)}")
+        
+        # Test non-existent resource access
+        try:
+            response = self.session.get(f"{API_BASE}/groups/non-existent-id")
+            if response.status_code == 404:
+                self.log_test("Error Handling - Non-existent Group", True, "Correctly returned 404 for non-existent group")
+            else:
+                self.log_test("Error Handling - Non-existent Group", False, f"Expected 404 but got HTTP {response.status_code}")
+        except Exception as e:
+            self.log_test("Error Handling - Non-existent Group", False, f"Error: {str(e)}")
+        
         # Test invalid watchlist user creation
         try:
             invalid_user = {"invalid_field": "test"}
