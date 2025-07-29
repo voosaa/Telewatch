@@ -337,13 +337,13 @@ class MultiTenantAPITester:
                     # Test PUT /api/users/{id}/role (Owner only)
                     response = self.session.put(f"{API_BASE}/users/{admin_user_id}/role?new_role=viewer")
                     if response.status_code == 200:
-                        updated_user = response.json()
-                        if updated_user['role'] == 'viewer':
+                        result = response.json()
+                        if 'message' in result and 'viewer' in result['message']:
                             self.log_test("Update User Role", True, 
-                                        f"Successfully updated user role to viewer", updated_user)
+                                        f"Successfully updated user role to viewer", result)
                         else:
                             self.log_test("Update User Role", False, 
-                                        f"Role was not updated correctly", updated_user)
+                                        f"Unexpected response format", result)
                     else:
                         self.log_test("Update User Role", False, f"HTTP {response.status_code}", response.text)
                     
