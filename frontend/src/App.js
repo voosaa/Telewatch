@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
+import AuthWrapper from "./components/auth/AuthWrapper";
+import ProtectedRoute from "./components/auth/ProtectedRoute";
+import OrganizationSettings from "./components/organization/OrganizationSettings";
+import UserManagement from "./components/organization/UserManagement";
 import axios from "axios";
 import { 
   Activity, 
@@ -14,38 +19,59 @@ import {
   Bot,
   Shield,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Building,
+  UserCog,
+  LogOut,
+  User
 } from "lucide-react";
 import "./App.css";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// =================== COMPONENTS ===================
+// =================== MULTI-TENANT COMPONENTS ===================
 
-const Sidebar = ({ activeTab, setActiveTab }) => {
+const Sidebar = ({ activeTab, setActiveTab, user, organization, logout }) => {
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'groups', label: 'Groups', icon: Users },
-    { id: 'watchlist', label: 'Watchlist', icon: Shield },
-    { id: 'forwarding', label: 'Forwarding', icon: ChevronRight },
-    { id: 'messages', label: 'Messages', icon: MessageSquare },
-    { id: 'bot', label: 'Bot Status', icon: Bot },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, roles: ['owner', 'admin', 'viewer'] },
+    { id: 'groups', label: 'Groups', icon: Users, roles: ['owner', 'admin', 'viewer'] },
+    { id: 'watchlist', label: 'Watchlist', icon: Shield, roles: ['owner', 'admin', 'viewer'] },
+    { id: 'forwarding', label: 'Forwarding', icon: ChevronRight, roles: ['owner', 'admin', 'viewer'] },
+    { id: 'messages', label: 'Messages', icon: MessageSquare, roles: ['owner', 'admin', 'viewer'] },
+    { id: 'bot', label: 'Bot Status', icon: Bot, roles: ['owner', 'admin', 'viewer'] },
+    { id: 'users', label: 'Team', icon: UserCog, roles: ['owner', 'admin'] },
+    { id: 'org-settings', label: 'Organization', icon: Building, roles: ['owner', 'admin'] },
+    { id: 'settings', label: 'Settings', icon: Settings, roles: ['owner', 'admin', 'viewer'] },
   ];
 
+  const filteredMenuItems = menuItems.filter(item => 
+    item.roles.includes(user?.role)
+  );
+
   return (
-    <div className="w-64 bg-gray-900 text-white min-h-screen p-4">
-      <div className="mb-8">
-        <h1 className="text-xl font-bold flex items-center gap-2">
+    <div className="w-64 bg-gray-900 text-white min-h-screen flex flex-col">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-700">
+        <div className="flex items-center gap-2 mb-2">
           <Bot className="w-6 h-6 text-blue-500" />
-          Telegram Monitor
-        </h1>
-        <p className="text-gray-400 text-sm">v1.0.0</p>
+          <h1 className="text-xl font-bold">Telegram Monitor</h1>
+        </div>
+        <div className="text-xs text-gray-400">
+          <div className="flex items-center gap-1">
+            <Building className="w-3 h-3" />
+            {organization?.name || 'Loading...'}
+          </div>
+          <div className="flex items-center gap-1 mt-1">
+            <User className="w-3 h-3" />
+            {user?.full_name} ({user?.role})
+          </div>
+        </div>
       </div>
       
-      <nav className="space-y-2">
-        {menuItems.map((item) => {
+      {/* Navigation */}
+      <nav className="flex-1 p-4 space-y-2">
+        {filteredMenuItems.map((item) => {
           const Icon = item.icon;
           return (
             <button
@@ -63,11 +89,22 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
           );
         })}
       </nav>
+
+      {/* Footer */}
+      <div className="p-4 border-t border-gray-700">
+        <button
+          onClick={logout}
+          className="w-full flex items-center gap-3 px-3 py-2 text-gray-300 hover:bg-red-600 hover:text-white rounded-lg transition-colors"
+        >
+          <LogOut className="w-5 h-5" />
+          Sign Out
+        </button>
+      </div>
     </div>
   );
 };
 
-const Dashboard = () => {
+const Dashboard = ({ user }) => {
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
 
@@ -134,7 +171,10 @@ const Dashboard = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-600">Welcome back, {user?.full_name}!</p>
+        </div>
         <button 
           onClick={fetchStats}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -145,7 +185,7 @@ const Dashboard = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {statCards.map((stat, index) => {
           const Icon = stat.icon;
           return (
@@ -164,35 +204,56 @@ const Dashboard = () => {
         })}
       </div>
 
-      {/* Top Users */}
-      {stats.top_users && stats.top_users.length > 0 && (
+      {/* Quick Actions */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {(user?.role === 'owner' || user?.role === 'admin') && (
+            <>
+              <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left">
+                <Users className="w-6 h-6 text-blue-600 mb-2" />
+                <h4 className="font-medium text-gray-900">Add Group</h4>
+                <p className="text-sm text-gray-600">Monitor a new Telegram group</p>
+              </button>
+              <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left">
+                <Shield className="w-6 h-6 text-green-600 mb-2" />
+                <h4 className="font-medium text-gray-900">Add to Watchlist</h4>
+                <p className="text-sm text-gray-600">Monitor a new user</p>
+              </button>
+              <button className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left">
+                <ChevronRight className="w-6 h-6 text-indigo-600 mb-2" />
+                <h4 className="font-medium text-gray-900">Setup Forwarding</h4>
+                <p className="text-sm text-gray-600">Configure message forwarding</p>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Recent Activity */}
+      {stats.recent_forwards && stats.recent_forwards.length > 0 && (
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Most Active Users</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
           <div className="space-y-3">
-            {stats.top_users.map((user, index) => (
+            {stats.recent_forwards.map((activity, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                    {index + 1}
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                    {activity.username.charAt(0).toUpperCase()}
                   </div>
-                  <span className="font-medium text-gray-900">@{user._id}</span>
+                  <div>
+                    <div className="font-medium text-gray-900">@{activity.username}</div>
+                    <div className="text-sm text-gray-600">{activity.group_name}</div>
+                  </div>
                 </div>
-                <span className="text-gray-600">{user.count} messages</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Message Types */}
-      {stats.message_types && stats.message_types.length > 0 && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Message Types</h3>
-          <div className="space-y-3">
-            {stats.message_types.map((type, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <span className="font-medium text-gray-900 capitalize">{type._id}</span>
-                <span className="text-gray-600">{type.count}</span>
+                <div className="text-right">
+                  <div className="text-sm font-medium text-gray-900">
+                    {activity.destination_count} destinations
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {new Date(activity.forwarded_at).toLocaleString()}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
