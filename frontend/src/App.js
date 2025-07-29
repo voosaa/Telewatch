@@ -507,7 +507,7 @@ const WatchlistManager = () => {
     
     try {
       const response = await axios.post(`${API}/watchlist`, newUser);
-      setNewUser({ username: '', user_id: '', full_name: '', group_ids: [], keywords: [] });
+      setNewUser({ username: '', user_id: '', full_name: '', group_ids: [], keywords: [], forwarding_destinations: [] });
       setShowAddForm(false);
       setSuccessMessage(`User "@${response.data.username}" added to watchlist successfully!`);
       fetchUsers();
