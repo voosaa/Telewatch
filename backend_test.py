@@ -211,8 +211,11 @@ class TelegramBotAPITester:
                 self.created_resources['forwarding_destinations'].append(destination_id)
                 
                 # Create watchlist user with forwarding destinations
+                import time
+                unique_username = f"forwarding_testuser_{int(time.time())}"
+                
                 test_user_data = {
-                    "username": "forwarding_testuser",
+                    "username": unique_username,
                     "user_id": "987654321",
                     "full_name": "Forwarding Test User",
                     "group_ids": [],
