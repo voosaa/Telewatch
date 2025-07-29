@@ -730,10 +730,58 @@ async def handle_telegram_message(update: Update) -> None:
         
         await db.message_logs.insert_one(message_log.dict())
         
-        # Forward the message (for now, we'll implement this later)
-        # This would forward to designated channels/groups
+        # Forward the message to configured destinations
+        forwarding_results = await forward_message_to_destinations(
+            message_text=message_text,
+            message_type=message_type,
+            username=username,
+            group_name=group.group_name,
+            matched_keywords=matched_keywords,
+            timestamp=datetime.now(timezone.utc),
+            destinations=monitored_user.forwarding_destinations,
+            media_info=media_info
+        )
         
-        logger.info(f"✅ Successfully logged message from monitored user {username} in group {group.group_name}")
+        # Update message log with forwarding results
+        await db.message_logs.update_one(
+            {"id": message_log.id},
+            {
+                "$set": {
+                    "is_forwarded": forwarding_results["success_count"] > 0,
+                    "forwarded_count": forwarding_results["success_count"]
+                }
+            }
+        )
+        
+        # Create forwarded message record if successful
+        if forwarding_results["success_count"] > 0:
+            forwarded_message = ForwardedMessage(
+                original_message_id=str(message.message_id),
+                from_group_id=chat_id,
+                from_group_name=group.group_name,
+                from_user_id=user_id,
+                from_username=username,
+                from_user_full_name=full_name,
+                message_text=message_text,
+                message_type=message_type,
+                media_info=media_info,
+                forwarded_to_destinations=monitored_user.forwarding_destinations,
+                matched_keywords=matched_keywords,
+                forwarding_status="success" if forwarding_results["failed_count"] == 0 else "partial",
+                error_details="; ".join(forwarding_results["errors"]) if forwarding_results["errors"] else None
+            )
+            
+            await db.forwarded_messages.insert_one(forwarded_message.dict())
+        
+        # Log success with forwarding info
+        if forwarding_results["success_count"] > 0:
+            destinations_str = ", ".join(forwarding_results["forwarded_to"])
+            logger.info(f"✅ Successfully logged and forwarded message from {username} to {forwarding_results['success_count']} destinations: {destinations_str}")
+        else:
+            logger.info(f"✅ Successfully logged message from monitored user {username} in group {group.group_name} (no forwarding destinations configured)")
+        
+        if forwarding_results["errors"]:
+            logger.warning(f"⚠️ Forwarding errors: {'; '.join(forwarding_results['errors'])}")
         
     except Exception as e:
         logger.error(f"❌ Error handling Telegram message: {e}", exc_info=True)
