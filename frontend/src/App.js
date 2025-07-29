@@ -1356,6 +1356,8 @@ const MainApp = () => {
         return <GroupsManager />;
       case 'watchlist':
         return <WatchlistManager />;
+      case 'forwarding':
+        return <ForwardingManager />;
       case 'messages':
         return <MessagesViewer />;
       case 'bot':
