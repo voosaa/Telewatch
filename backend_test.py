@@ -105,8 +105,11 @@ class TelegramBotAPITester:
     def test_forwarding_destinations_management(self):
         """Test Forwarding Destinations Management CRUD operations"""
         
+        import random
+        unique_id = f"-100{random.randint(1000000000, 9999999999)}"
+        
         test_destination_data = {
-            "destination_id": "-1001234567890",
+            "destination_id": unique_id,
             "destination_name": "Test Channel",
             "destination_type": "channel",
             "is_active": True,
