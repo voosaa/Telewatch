@@ -363,8 +363,11 @@ class TelegramBotAPITester:
         
         # Test duplicate forwarding destination creation
         try:
+            import random
+            unique_id = f"-100{random.randint(1000000000, 9999999999)}"
+            
             duplicate_destination = {
-                "destination_id": "-1001111111111",
+                "destination_id": unique_id,
                 "destination_name": "Duplicate Test",
                 "destination_type": "channel"
             }
