@@ -1735,8 +1735,12 @@ async def list_organization_users(current_user: Dict = Depends(get_current_activ
     return [
         UserResponse(
             id=user["id"],
-            email=user["email"],
-            full_name=user["full_name"],
+            telegram_id=user["telegram_id"],
+            username=user.get("username"),
+            first_name=user["first_name"],
+            last_name=user.get("last_name"),
+            full_name=user.get("last_name") and f"{user['first_name']} {user['last_name']}" or user["first_name"],
+            photo_url=user.get("photo_url"),
             is_active=user["is_active"],
             role=UserRole(user["role"]),
             organization_id=user["organization_id"],
@@ -1751,44 +1755,13 @@ async def invite_user(
     invite_data: UserInvite,
     current_user: Dict = Depends(require_admin)
 ):
-    """Invite a new user to the organization (Admin/Owner only)"""
-    try:
-        # Check if user already exists
-        existing_user = await db.users.find_one({"email": invite_data.email})
-        if existing_user:
-            raise HTTPException(status_code=400, detail="User with this email already exists")
-        
-        # Generate temporary password (in production, send email with setup link)
-        temp_password = str(uuid.uuid4())[:8]
-        
-        # Create user
-        user = User(
-            email=invite_data.email,
-            password_hash=hash_password(temp_password),
-            full_name=invite_data.full_name,
-            role=invite_data.role,
-            organization_id=current_user["organization_id"]
-        )
-        
-        await db.users.insert_one(user.dict())
-        
-        # In production, send email with temp password and setup instructions
-        logger.info(f"User invited: {invite_data.email} with temporary password: {temp_password}")
-        
-        return UserResponse(
-            id=user.id,
-            email=user.email,
-            full_name=user.full_name,
-            is_active=user.is_active,
-            role=user.role,
-            organization_id=user.organization_id,
-            created_at=user.created_at
-        )
-        
-    except Exception as e:
-        if "already exists" in str(e):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Failed to invite user: {str(e)}")
+    """Invite a new user to the organization (Admin/Owner only) - Telegram-based system"""
+    # For Telegram-based authentication, we cannot create users without their Telegram data
+    # This endpoint now serves as a placeholder for future invite system
+    raise HTTPException(
+        status_code=501, 
+        detail="User invitation system not implemented for Telegram authentication. Users must register themselves using Telegram Login Widget."
+    )
 
 @api_router.put("/users/{user_id}/role")
 async def update_user_role(
