@@ -3526,17 +3526,23 @@ class TelegramBotAPITester:
             self.log_test("NOWPayments Environment Configuration", False, f"Error: {str(e)}")
 
     def run_nowpayments_tests(self):
-        """Run all NOWPayments cryptocurrency payment system tests"""
-        print("🚀 Starting NOWPayments Cryptocurrency Payment System Tests")
-        print("=" * 60)
+        """Run all NOWPayments cryptocurrency payment system tests - TESTING FIXES"""
+        print("🚀 Starting NOWPayments Cryptocurrency Payment System Tests - TESTING FIXES")
+        print("=" * 70)
+        print("🔧 FIXES BEING TESTED:")
+        print("   1. Fixed Response Parsing - payment_id field from NOWPayments responses")
+        print("   2. Removed USDT - USDT no longer supported to avoid estimation issues")
+        print("   3. Updated Currency Lists - Only BTC, ETH, USDC, SOL supported")
+        print("   4. Maintained Pricing - Pro ($9.99) and Enterprise ($19.99)")
+        print("=" * 70)
         
-        # Test charge creation with valid plans and currencies
+        # Test charge creation with valid plans and currencies (FIXED - no USDT)
         self.test_nowpayments_create_charge_valid_plans()
         
-        # Test validation (invalid plans and currencies)
+        # Test validation (invalid plans and currencies, including USDT rejection)
         self.test_nowpayments_create_charge_validation()
         
-        # Test supported currencies endpoint
+        # Test supported currencies endpoint (FIXED - no USDT)
         self.test_nowpayments_currencies_endpoint()
         
         # Test IPN (webhook) handler
@@ -3551,9 +3557,9 @@ class TelegramBotAPITester:
         # Test environment configuration
         self.test_nowpayments_environment_configuration()
         
-        print("\n" + "=" * 60)
-        print("📊 NOWPAYMENTS CRYPTOCURRENCY PAYMENT SYSTEM TEST SUMMARY")
-        print("=" * 60)
+        print("\n" + "=" * 70)
+        print("📊 NOWPAYMENTS CRYPTOCURRENCY PAYMENT SYSTEM TEST SUMMARY - FIXES")
+        print("=" * 70)
         
         # Filter results for NOWPayments tests
         nowpayments_tests = [t for t in self.test_results if 'nowpayments' in t['test'].lower()]
