@@ -653,7 +653,7 @@ backend:
 frontend:
   - task: "Telegram Login Widget - JavaScript Runtime Error on Authentication"
     implemented: true
-    working: false
+    working: true
     file: "LoginForm.js, RegisterForm.js"
     stuck_count: 2
     priority: "critical"
