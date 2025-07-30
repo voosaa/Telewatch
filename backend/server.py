@@ -4044,7 +4044,7 @@ async def create_crypto_charge(
             raise HTTPException(status_code=400, detail="Invalid plan. Must be 'pro' or 'enterprise'")
         
         # Validate cryptocurrency
-        supported_currencies = ["btc", "eth", "usdt", "usdc", "sol"]
+        supported_currencies = ["btc", "eth", "usdc", "sol"]  # Removed USDT temporarily
         if charge_request.pay_currency.lower() not in supported_currencies:
             raise HTTPException(status_code=400, detail=f"Unsupported cryptocurrency. Supported: {supported_currencies}")
         
