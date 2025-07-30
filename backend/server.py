@@ -1870,7 +1870,232 @@ async def deactivate_user(
     
     return {"message": "User deactivated successfully"}
 
-# Test Routes
+# ================== ACCOUNT MANAGEMENT ROUTES ==================
+
+@api_router.get("/accounts", response_model=List[AccountResponse])
+async def list_accounts(current_user: Dict = Depends(get_current_active_user)):
+    """List all accounts in current organization"""
+    accounts = await db.accounts.find({
+        "organization_id": current_user["organization_id"],
+        "is_active": True
+    }).to_list(100)
+    
+    return [
+        AccountResponse(
+            id=account["id"],
+            name=account["name"],
+            phone_number=account.get("phone_number"),
+            username=account.get("username"),
+            first_name=account.get("first_name"),
+            last_name=account.get("last_name"),
+            status=AccountStatus(account["status"]),
+            is_active=account["is_active"],
+            last_activity=account.get("last_activity"),
+            created_at=account["created_at"],
+            error_message=account.get("error_message")
+        )
+        for account in accounts
+    ]
+
+@api_router.post("/accounts/upload", response_model=AccountResponse)
+async def upload_account(
+    name: str = Form(...),
+    session_file: UploadFile = File(...),
+    json_file: UploadFile = File(...),
+    current_user: Dict = Depends(require_admin)
+):
+    """Upload account session and JSON files (Admin/Owner only)"""
+    try:
+        # Validate file extensions
+        if not session_file.filename.endswith('.session'):
+            raise HTTPException(status_code=400, detail="Session file must have .session extension")
+        
+        if not json_file.filename.endswith('.json'):
+            raise HTTPException(status_code=400, detail="JSON file must have .json extension")
+        
+        # Generate unique filenames
+        account_id = str(uuid.uuid4())
+        timestamp = int(datetime.now(timezone.utc).timestamp())
+        
+        session_filename = f"{current_user['organization_id']}_{account_id}_{timestamp}.session"
+        json_filename = f"{current_user['organization_id']}_{account_id}_{timestamp}.json"
+        
+        session_path = SESSIONS_DIR / session_filename
+        json_path = JSON_DIR / json_filename
+        
+        # Save session file
+        async with aiofiles.open(session_path, 'wb') as f:
+            content = await session_file.read()
+            await f.write(content)
+        
+        # Save and parse JSON file
+        json_content = await json_file.read()
+        json_data = json.loads(json_content.decode('utf-8'))
+        
+        async with aiofiles.open(json_path, 'wb') as f:
+            await f.write(json_content)
+        
+        # Extract account info from JSON
+        phone_number = json_data.get('phone_number')
+        username = json_data.get('username')
+        first_name = json_data.get('first_name')
+        last_name = json_data.get('last_name')
+        
+        # Create account record
+        account = Account(
+            id=account_id,
+            organization_id=current_user["organization_id"],
+            created_by=current_user["user_id"],
+            name=name,
+            phone_number=phone_number,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            status=AccountStatus.INACTIVE,
+            session_file_path=str(session_path),
+            json_file_path=str(json_path),
+            metadata=json_data
+        )
+        
+        await db.accounts.insert_one(account.dict())
+        
+        return AccountResponse(
+            id=account.id,
+            name=account.name,
+            phone_number=account.phone_number,
+            username=account.username,
+            first_name=account.first_name,
+            last_name=account.last_name,
+            status=account.status,
+            is_active=account.is_active,
+            last_activity=account.last_activity,
+            created_at=account.created_at,
+            error_message=account.error_message
+        )
+        
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON file format")
+    except Exception as e:
+        # Cleanup files if account creation failed
+        if session_path.exists():
+            session_path.unlink()
+        if json_path.exists():
+            json_path.unlink()
+        
+        logger.error(f"Account upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Account upload failed: {str(e)}")
+
+@api_router.delete("/accounts/{account_id}")
+async def delete_account(
+    account_id: str,
+    current_user: Dict = Depends(require_admin)
+):
+    """Delete account and associated files (Admin/Owner only)"""
+    try:
+        # Find account
+        account = await db.accounts.find_one({
+            "id": account_id,
+            "organization_id": current_user["organization_id"]
+        })
+        
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        
+        # Delete files
+        session_path = Path(account["session_file_path"])
+        json_path = Path(account["json_file_path"])
+        
+        if session_path.exists():
+            session_path.unlink()
+        if json_path.exists():
+            json_path.unlink()
+        
+        # Delete account record
+        await db.accounts.delete_one({
+            "id": account_id,
+            "organization_id": current_user["organization_id"]
+        })
+        
+        return {"message": "Account deleted successfully"}
+        
+    except Exception as e:
+        logger.error(f"Account deletion failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Account deletion failed: {str(e)}")
+
+@api_router.post("/accounts/{account_id}/activate")
+async def activate_account(
+    account_id: str,
+    current_user: Dict = Depends(require_admin)
+):
+    """Activate account for monitoring (Admin/Owner only)"""
+    try:
+        # Find account
+        account = await db.accounts.find_one({
+            "id": account_id,
+            "organization_id": current_user["organization_id"]
+        })
+        
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        
+        # Update account status
+        await db.accounts.update_one(
+            {"id": account_id, "organization_id": current_user["organization_id"]},
+            {
+                "$set": {
+                    "status": AccountStatus.ACTIVE.value,
+                    "updated_at": datetime.now(timezone.utc),
+                    "error_message": None
+                }
+            }
+        )
+        
+        return {"message": "Account activated successfully"}
+        
+    except Exception as e:
+        logger.error(f"Account activation failed: {e}")
+        
+        # Update account with error
+        await db.accounts.update_one(
+            {"id": account_id, "organization_id": current_user["organization_id"]},
+            {
+                "$set": {
+                    "status": AccountStatus.ERROR.value,
+                    "updated_at": datetime.now(timezone.utc),
+                    "error_message": str(e)
+                }
+            }
+        )
+        
+        raise HTTPException(status_code=500, detail=f"Account activation failed: {str(e)}")
+
+@api_router.post("/accounts/{account_id}/deactivate")
+async def deactivate_account(
+    account_id: str,
+    current_user: Dict = Depends(require_admin)
+):
+    """Deactivate account monitoring (Admin/Owner only)"""
+    try:
+        result = await db.accounts.update_one(
+            {"id": account_id, "organization_id": current_user["organization_id"]},
+            {
+                "$set": {
+                    "status": AccountStatus.INACTIVE.value,
+                    "updated_at": datetime.now(timezone.utc)
+                }
+            }
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Account not found")
+        
+        return {"message": "Account deactivated successfully"}
+        
+    except Exception as e:
+        logger.error(f"Account deactivation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Account deactivation failed: {str(e)}")
+
+# ================== TEST ROUTES ==================
 @api_router.get("/")
 async def root():
     return {"message": "Telegram Monitor Bot API", "version": "1.0.0"}
