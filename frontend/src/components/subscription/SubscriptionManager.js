@@ -21,6 +21,7 @@ const SubscriptionManager = () => {
   const [error, setError] = useState('');
   const [paymentLoading, setPaymentLoading] = useState('');
   const [paymentHistory, setPaymentHistory] = useState([]);
+  const [supportedCurrencies, setSupportedCurrencies] = useState([]);
 
   // Plan configurations
   const plans = {
