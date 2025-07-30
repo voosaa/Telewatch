@@ -634,6 +634,17 @@ backend:
         comment: "✅ TESTED: Comprehensive Telegram Bot Command functionality testing completed with 100% success rate (22/22 tests passed). **BOT COMMANDS:** All primary commands working perfectly - /start shows main menu with inline keyboards, /help displays comprehensive help information, /menu provides navigation interface. **INLINE KEYBOARDS & CALLBACKS:** All 8 callback query handlers operational (status, groups, watchlist, messages, settings, help, main_menu, admin_menu) with proper MarkdownV2 formatting and interactive navigation. **BOT AUTHENTICATION:** Webhook authentication working with proper secret validation - valid secrets accepted, invalid secrets rejected with HTTP 403. **DATABASE INTEGRATION:** Bot successfully accesses all backend systems - statistics API, groups management, watchlist data with proper multi-tenant isolation. **ERROR HANDLING:** Robust error handling for unknown commands and callback queries - all handled gracefully without crashes. **MULTI-TENANT SUPPORT:** Bot properly processes commands with tenant-specific data, respects organization boundaries. **BOT SETUP:** Bot connection verified (@Telewatch_test_bot, ID: 8342094196), webhook configured successfully, all handlers registered and operational. The Telegram Bot provides a professional interface for users to interact with the monitoring system with seamless integration to the web dashboard for full functionality."
 
 frontend:
+  - task: "Telegram Login Widget - Actual Telegram Authentication Implementation"
+    implemented: false
+    working: false
+    file: "LoginForm.js, RegisterForm.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "❌ USER REPORTED ISSUE: Cannot login with Telegram account into the dashboard. The current login page shows bot authentication and manual registration options but does not have the actual Telegram Login Widget integrated. The system needs proper Telegram Login Widget implementation to allow users to authenticate using their Telegram accounts directly in the web interface."
   - task: "Account Management Interface - Session File Upload System" 
     implemented: true
     working: true
