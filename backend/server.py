@@ -3600,9 +3600,11 @@ async def get_account_status(
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    logger.info("Starting Telegram Monitor Bot API")
+    logger.info("Starting Telegram Monitor Bot API - Multi-Account Session Monitoring System")
+    logger.info("Running multi-tenancy database migration...")
+    await migrate_database_for_multitenancy()
     
-    # Initialize bot
+    # Initialize bot (still available for admin commands)
     try:
         bot_info = await bot.get_me()
         logger.info(f"Bot connected: @{bot_info.username}")
@@ -3611,17 +3613,41 @@ async def startup_event():
     
     # Initialize active user accounts
     await initialize_active_accounts()
+    
+    # Start health monitoring
+    await health_monitor.start_health_monitoring()
+    
+    # Initialize load balancer periodic reset task
+    asyncio.create_task(periodic_load_reset())
+    
+    logger.info("🚀 Multi-Account Session Monitoring System ready!")
+    
+async def periodic_load_reset():
+    """Periodically reset load balancer counters"""
+    while True:
+        try:
+            await asyncio.sleep(3600)  # Reset every hour
+            load_balancer.reset_load_counters()
+            logger.debug("Load balancer counters reset")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error in periodic load reset: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("Shutting down Telegram Monitor Bot API")
     
+    # Stop health monitoring
+    await health_monitor.stop_health_monitoring()
+    
     # Disconnect all active accounts
     for account_id in list(account_manager.active_clients.keys()):
         await account_manager.disconnect_account(account_id)
     
     await shutdown_db_client()
+    logger.info("Shutdown complete")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
