@@ -4149,7 +4149,7 @@ async def create_crypto_charge(
         
         return CryptoChargeResponse(
             payment_url=payment_response.get("payment_url"),
-            payment_id=payment_response.get("payment_id"),
+            payment_id=payment_response.get("payment_id"),  # Fixed: Use payment_id from NOWPayments
             amount=str(plan_price),
             plan=charge_request.plan,
             pay_currency=charge_request.pay_currency.lower(),
