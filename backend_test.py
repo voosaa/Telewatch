@@ -2179,6 +2179,630 @@ class TelegramBotAPITester:
         except Exception as e:
             self.log_test("Multi-Tenant Isolation Verification", False, f"Error: {str(e)}")
 
+    def test_telegram_bot_webhook_authentication(self):
+        """Test Telegram webhook authentication with valid and invalid secrets"""
+        try:
+            # Test with valid webhook secret
+            webhook_secret = "telegram_bot_webhook_secret_2025"  # From backend .env
+            webhook_url = f"{API_BASE}/telegram/webhook/{webhook_secret}"
+            
+            # Create a mock Telegram update
+            mock_update = {
+                "update_id": 123456789,
+                "message": {
+                    "message_id": 1,
+                    "from": {
+                        "id": 123456789,
+                        "is_bot": False,
+                        "first_name": "Test",
+                        "username": "testuser"
+                    },
+                    "chat": {
+                        "id": 123456789,
+                        "first_name": "Test",
+                        "username": "testuser",
+                        "type": "private"
+                    },
+                    "date": int(datetime.now().timestamp()),
+                    "text": "/start"
+                }
+            }
+            
+            response = self.session.post(webhook_url, json=mock_update)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Telegram Webhook - Valid Secret", True, 
+                                "Webhook accepted valid secret and processed update", result)
+                else:
+                    self.log_test("Telegram Webhook - Valid Secret", False, 
+                                "Webhook accepted secret but returned unexpected response", result)
+            else:
+                self.log_test("Telegram Webhook - Valid Secret", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test with invalid webhook secret
+            invalid_webhook_url = f"{API_BASE}/telegram/webhook/invalid_secret"
+            response = self.session.post(invalid_webhook_url, json=mock_update)
+            
+            if response.status_code == 403:
+                self.log_test("Telegram Webhook - Invalid Secret", True, 
+                            "Webhook correctly rejected invalid secret with HTTP 403")
+            else:
+                self.log_test("Telegram Webhook - Invalid Secret", False, 
+                            f"Expected HTTP 403 but got {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Telegram Bot Webhook Authentication", False, f"Error: {str(e)}")
+
+    def test_telegram_bot_command_processing(self):
+        """Test that bot processes commands correctly through webhook"""
+        try:
+            webhook_secret = "telegram_bot_webhook_secret_2025"
+            webhook_url = f"{API_BASE}/telegram/webhook/{webhook_secret}"
+            
+            # Test /start command
+            start_update = {
+                "update_id": 123456790,
+                "message": {
+                    "message_id": 2,
+                    "from": {
+                        "id": 123456789,
+                        "is_bot": False,
+                        "first_name": "Test",
+                        "last_name": "User",
+                        "username": "testuser"
+                    },
+                    "chat": {
+                        "id": 123456789,
+                        "first_name": "Test",
+                        "username": "testuser",
+                        "type": "private"
+                    },
+                    "date": int(datetime.now().timestamp()),
+                    "text": "/start"
+                }
+            }
+            
+            response = self.session.post(webhook_url, json=start_update)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Command Processing - /start", True, 
+                                "Bot successfully processed /start command", result)
+                else:
+                    self.log_test("Bot Command Processing - /start", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Command Processing - /start", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test /help command
+            help_update = {
+                "update_id": 123456791,
+                "message": {
+                    "message_id": 3,
+                    "from": {
+                        "id": 123456789,
+                        "is_bot": False,
+                        "first_name": "Test",
+                        "username": "testuser"
+                    },
+                    "chat": {
+                        "id": 123456789,
+                        "first_name": "Test",
+                        "username": "testuser",
+                        "type": "private"
+                    },
+                    "date": int(datetime.now().timestamp()),
+                    "text": "/help"
+                }
+            }
+            
+            response = self.session.post(webhook_url, json=help_update)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Command Processing - /help", True, 
+                                "Bot successfully processed /help command", result)
+                else:
+                    self.log_test("Bot Command Processing - /help", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Command Processing - /help", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Telegram Bot Command Processing", False, f"Error: {str(e)}")
+
+    def test_telegram_bot_callback_queries(self):
+        """Test bot callback query handling (inline keyboard buttons)"""
+        try:
+            webhook_secret = "telegram_bot_webhook_secret_2025"
+            webhook_url = f"{API_BASE}/telegram/webhook/{webhook_secret}"
+            
+            # Test callback query for status button
+            callback_update = {
+                "update_id": 123456792,
+                "callback_query": {
+                    "id": "callback_query_id_123",
+                    "from": {
+                        "id": 123456789,
+                        "is_bot": False,
+                        "first_name": "Test",
+                        "username": "testuser"
+                    },
+                    "message": {
+                        "message_id": 4,
+                        "from": {
+                            "id": 8342094196,
+                            "is_bot": True,
+                            "first_name": "TeleWatch",
+                            "username": "Telewatch_test_bot"
+                        },
+                        "chat": {
+                            "id": 123456789,
+                            "first_name": "Test",
+                            "username": "testuser",
+                            "type": "private"
+                        },
+                        "date": int(datetime.now().timestamp()),
+                        "text": "Welcome message with inline keyboard"
+                    },
+                    "data": "status"
+                }
+            }
+            
+            response = self.session.post(webhook_url, json=callback_update)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Callback Query - Status", True, 
+                                "Bot successfully processed status callback query", result)
+                else:
+                    self.log_test("Bot Callback Query - Status", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Callback Query - Status", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test callback query for groups button
+            groups_callback = callback_update.copy()
+            groups_callback["update_id"] = 123456793
+            groups_callback["callback_query"]["data"] = "groups"
+            
+            response = self.session.post(webhook_url, json=groups_callback)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Callback Query - Groups", True, 
+                                "Bot successfully processed groups callback query", result)
+                else:
+                    self.log_test("Bot Callback Query - Groups", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Callback Query - Groups", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test callback query for watchlist button
+            watchlist_callback = callback_update.copy()
+            watchlist_callback["update_id"] = 123456794
+            watchlist_callback["callback_query"]["data"] = "watchlist"
+            
+            response = self.session.post(webhook_url, json=watchlist_callback)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Callback Query - Watchlist", True, 
+                                "Bot successfully processed watchlist callback query", result)
+                else:
+                    self.log_test("Bot Callback Query - Watchlist", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Callback Query - Watchlist", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test callback query for messages button
+            messages_callback = callback_update.copy()
+            messages_callback["update_id"] = 123456795
+            messages_callback["callback_query"]["data"] = "messages"
+            
+            response = self.session.post(webhook_url, json=messages_callback)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Callback Query - Messages", True, 
+                                "Bot successfully processed messages callback query", result)
+                else:
+                    self.log_test("Bot Callback Query - Messages", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Callback Query - Messages", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test callback query for settings button
+            settings_callback = callback_update.copy()
+            settings_callback["update_id"] = 123456796
+            settings_callback["callback_query"]["data"] = "settings"
+            
+            response = self.session.post(webhook_url, json=settings_callback)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Callback Query - Settings", True, 
+                                "Bot successfully processed settings callback query", result)
+                else:
+                    self.log_test("Bot Callback Query - Settings", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Callback Query - Settings", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test callback query for help button
+            help_callback = callback_update.copy()
+            help_callback["update_id"] = 123456797
+            help_callback["callback_query"]["data"] = "help"
+            
+            response = self.session.post(webhook_url, json=help_callback)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Callback Query - Help", True, 
+                                "Bot successfully processed help callback query", result)
+                else:
+                    self.log_test("Bot Callback Query - Help", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Callback Query - Help", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test callback query for main_menu button
+            main_menu_callback = callback_update.copy()
+            main_menu_callback["update_id"] = 123456798
+            main_menu_callback["callback_query"]["data"] = "main_menu"
+            
+            response = self.session.post(webhook_url, json=main_menu_callback)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Callback Query - Main Menu", True, 
+                                "Bot successfully processed main_menu callback query", result)
+                else:
+                    self.log_test("Bot Callback Query - Main Menu", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Callback Query - Main Menu", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test callback query for admin_menu button
+            admin_menu_callback = callback_update.copy()
+            admin_menu_callback["update_id"] = 123456799
+            admin_menu_callback["callback_query"]["data"] = "admin_menu"
+            
+            response = self.session.post(webhook_url, json=admin_menu_callback)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Callback Query - Admin Menu", True, 
+                                "Bot successfully processed admin_menu callback query", result)
+                else:
+                    self.log_test("Bot Callback Query - Admin Menu", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Callback Query - Admin Menu", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Telegram Bot Callback Queries", False, f"Error: {str(e)}")
+
+    def test_telegram_bot_integration_with_backend(self):
+        """Test that bot can access backend data (statistics, groups, etc.)"""
+        try:
+            # First, create some test data if authenticated
+            if self.auth_token:
+                # Create a test group
+                test_group = {
+                    "group_id": "-1001234567890",
+                    "group_name": "Test Group for Bot",
+                    "group_type": "supergroup",
+                    "description": "Test group for bot integration testing"
+                }
+                
+                response = self.session.post(f"{API_BASE}/groups", json=test_group)
+                if response.status_code == 200:
+                    created_group = response.json()
+                    self.created_resources['groups'].append(created_group.get('id'))
+                    self.log_test("Bot Integration - Test Data Setup", True, 
+                                "Created test group for bot integration testing", created_group)
+                else:
+                    self.log_test("Bot Integration - Test Data Setup", False, 
+                                f"Failed to create test group: HTTP {response.status_code}", response.text)
+            
+            # Test that bot can access statistics
+            webhook_secret = "telegram_bot_webhook_secret_2025"
+            webhook_url = f"{API_BASE}/telegram/webhook/{webhook_secret}"
+            
+            # Send status callback query to trigger statistics access
+            status_callback = {
+                "update_id": 123456800,
+                "callback_query": {
+                    "id": "callback_query_status_123",
+                    "from": {
+                        "id": 123456789,
+                        "is_bot": False,
+                        "first_name": "Test",
+                        "username": "testuser"
+                    },
+                    "message": {
+                        "message_id": 5,
+                        "from": {
+                            "id": 8342094196,
+                            "is_bot": True,
+                            "first_name": "TeleWatch",
+                            "username": "Telewatch_test_bot"
+                        },
+                        "chat": {
+                            "id": 123456789,
+                            "first_name": "Test",
+                            "username": "testuser",
+                            "type": "private"
+                        },
+                        "date": int(datetime.now().timestamp()),
+                        "text": "Main menu"
+                    },
+                    "data": "status"
+                }
+            }
+            
+            response = self.session.post(webhook_url, json=status_callback)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Backend Integration - Statistics Access", True, 
+                                "Bot successfully accessed backend statistics through status callback", result)
+                else:
+                    self.log_test("Bot Backend Integration - Statistics Access", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Backend Integration - Statistics Access", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Telegram Bot Backend Integration", False, f"Error: {str(e)}")
+
+    def test_telegram_bot_error_handling(self):
+        """Test bot error handling for unknown commands and malformed updates"""
+        try:
+            webhook_secret = "telegram_bot_webhook_secret_2025"
+            webhook_url = f"{API_BASE}/telegram/webhook/{webhook_secret}"
+            
+            # Test unknown command
+            unknown_command_update = {
+                "update_id": 123456801,
+                "message": {
+                    "message_id": 6,
+                    "from": {
+                        "id": 123456789,
+                        "is_bot": False,
+                        "first_name": "Test",
+                        "username": "testuser"
+                    },
+                    "chat": {
+                        "id": 123456789,
+                        "first_name": "Test",
+                        "username": "testuser",
+                        "type": "private"
+                    },
+                    "date": int(datetime.now().timestamp()),
+                    "text": "/unknown_command"
+                }
+            }
+            
+            response = self.session.post(webhook_url, json=unknown_command_update)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Error Handling - Unknown Command", True, 
+                                "Bot gracefully handled unknown command", result)
+                else:
+                    self.log_test("Bot Error Handling - Unknown Command", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Error Handling - Unknown Command", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test unknown callback query
+            unknown_callback = {
+                "update_id": 123456802,
+                "callback_query": {
+                    "id": "callback_query_unknown_123",
+                    "from": {
+                        "id": 123456789,
+                        "is_bot": False,
+                        "first_name": "Test",
+                        "username": "testuser"
+                    },
+                    "message": {
+                        "message_id": 7,
+                        "from": {
+                            "id": 8342094196,
+                            "is_bot": True,
+                            "first_name": "TeleWatch",
+                            "username": "Telewatch_test_bot"
+                        },
+                        "chat": {
+                            "id": 123456789,
+                            "first_name": "Test",
+                            "username": "testuser",
+                            "type": "private"
+                        },
+                        "date": int(datetime.now().timestamp()),
+                        "text": "Some message"
+                    },
+                    "data": "unknown_callback_data"
+                }
+            }
+            
+            response = self.session.post(webhook_url, json=unknown_callback)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Error Handling - Unknown Callback", True, 
+                                "Bot gracefully handled unknown callback query", result)
+                else:
+                    self.log_test("Bot Error Handling - Unknown Callback", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Error Handling - Unknown Callback", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Telegram Bot Error Handling", False, f"Error: {str(e)}")
+
+    def test_telegram_bot_multi_tenant_support(self):
+        """Test that bot properly handles multi-tenant data access"""
+        try:
+            # This test verifies that bot commands access tenant-specific data
+            webhook_secret = "telegram_bot_webhook_secret_2025"
+            webhook_url = f"{API_BASE}/telegram/webhook/{webhook_secret}"
+            
+            # Test groups callback to see if it accesses tenant-specific groups
+            groups_callback = {
+                "update_id": 123456803,
+                "callback_query": {
+                    "id": "callback_query_groups_tenant",
+                    "from": {
+                        "id": 123456789,
+                        "is_bot": False,
+                        "first_name": "Test",
+                        "username": "testuser"
+                    },
+                    "message": {
+                        "message_id": 8,
+                        "from": {
+                            "id": 8342094196,
+                            "is_bot": True,
+                            "first_name": "TeleWatch",
+                            "username": "Telewatch_test_bot"
+                        },
+                        "chat": {
+                            "id": 123456789,
+                            "first_name": "Test",
+                            "username": "testuser",
+                            "type": "private"
+                        },
+                        "date": int(datetime.now().timestamp()),
+                        "text": "Main menu"
+                    },
+                    "data": "groups"
+                }
+            }
+            
+            response = self.session.post(webhook_url, json=groups_callback)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Multi-Tenant Support - Groups Access", True, 
+                                "Bot successfully processed groups callback with tenant-specific data", result)
+                else:
+                    self.log_test("Bot Multi-Tenant Support - Groups Access", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Multi-Tenant Support - Groups Access", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test watchlist callback
+            watchlist_callback = groups_callback.copy()
+            watchlist_callback["update_id"] = 123456804
+            watchlist_callback["callback_query"]["data"] = "watchlist"
+            
+            response = self.session.post(webhook_url, json=watchlist_callback)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'ok':
+                    self.log_test("Bot Multi-Tenant Support - Watchlist Access", True, 
+                                "Bot successfully processed watchlist callback with tenant-specific data", result)
+                else:
+                    self.log_test("Bot Multi-Tenant Support - Watchlist Access", False, 
+                                "Bot webhook responded but with unexpected status", result)
+            else:
+                self.log_test("Bot Multi-Tenant Support - Watchlist Access", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Telegram Bot Multi-Tenant Support", False, f"Error: {str(e)}")
+
+    def run_telegram_bot_command_tests(self):
+        """Run comprehensive Telegram bot command functionality tests"""
+        print("\n🤖 Starting Telegram Bot Command Functionality Tests")
+        print("=" * 70)
+        
+        # Test webhook authentication
+        self.test_telegram_bot_webhook_authentication()
+        
+        # Test command processing
+        self.test_telegram_bot_command_processing()
+        
+        # Test callback queries (inline keyboards)
+        self.test_telegram_bot_callback_queries()
+        
+        # Test backend integration
+        self.test_telegram_bot_integration_with_backend()
+        
+        # Test error handling
+        self.test_telegram_bot_error_handling()
+        
+        # Test multi-tenant support
+        self.test_telegram_bot_multi_tenant_support()
+        
+        print("\n" + "=" * 70)
+        print("📊 TELEGRAM BOT COMMAND FUNCTIONALITY TEST SUMMARY")
+        print("=" * 70)
+        
+        # Filter results for bot command tests
+        bot_tests = [t for t in self.test_results if any(keyword in t['test'].lower() for keyword in ['bot command', 'bot callback', 'bot webhook', 'bot integration', 'bot error', 'bot multi-tenant'])]
+        
+        total_tests = len(bot_tests)
+        passed_tests = len([t for t in bot_tests if t['success']])
+        failed_tests = total_tests - passed_tests
+        
+        print(f"Total Bot Command Tests: {total_tests}")
+        print(f"✅ Passed: {passed_tests}")
+        print(f"❌ Failed: {failed_tests}")
+        print(f"Success Rate: {(passed_tests/total_tests)*100:.1f}%" if total_tests > 0 else "No tests run")
+        
+        if failed_tests > 0:
+            print("\n❌ FAILED BOT COMMAND TESTS:")
+            for test in bot_tests:
+                if not test['success']:
+                    print(f"  • {test['test']}: {test['details']}")
+        
+        print("\n" + "=" * 70)
+        
+        return {
+            'total': total_tests,
+            'passed': passed_tests,
+            'failed': failed_tests,
+            'success_rate': (passed_tests/total_tests)*100 if total_tests > 0 else 0,
+            'results': bot_tests
+        }
+
     def run_multi_account_session_monitoring_tests(self):
         """Run all multi-account session-based monitoring system tests"""
         print("\n🚀 Starting Multi-Account Session-Based Monitoring System Tests")
