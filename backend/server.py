@@ -337,6 +337,45 @@ require_owner = require_role([UserRole.OWNER])
 require_admin = require_role([UserRole.OWNER, UserRole.ADMIN])
 require_any_role = require_role([UserRole.OWNER, UserRole.ADMIN, UserRole.VIEWER])
 
+# ================== TELEGRAM AUTHENTICATION FUNCTIONS ==================
+
+def verify_telegram_authentication(auth_data: Dict[str, Any]) -> bool:
+    """Verify Telegram Login Widget authentication data"""
+    try:
+        bot_token = os.environ.get('TELEGRAM_TOKEN')
+        if not bot_token:
+            raise ValueError("Telegram bot token not configured")
+        
+        # Create a copy of auth_data without the hash
+        check_data = auth_data.copy()
+        received_hash = check_data.pop('hash', '')
+        
+        # Create data check string
+        data_check_arr = [f"{key}={value}" for key, value in sorted(check_data.items())]
+        data_check_string = '\n'.join(data_check_arr)
+        
+        # Create secret key from bot token
+        secret_key = hashlib.sha256(bot_token.encode()).digest()
+        
+        # Generate hash
+        calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+        
+        # Verify hash matches
+        if not hmac.compare_digest(calculated_hash, received_hash):
+            return False
+        
+        # Check if auth_date is not too old (within 24 hours)
+        auth_date = int(auth_data.get('auth_date', 0))
+        current_timestamp = int(datetime.now(timezone.utc).timestamp())
+        if current_timestamp - auth_date > 86400:  # 24 hours
+            return False
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error verifying Telegram authentication: {e}")
+        return False
+
 # ================== UTILITY FUNCTIONS (Updated for Multi-tenancy) ==================
 
 def escape_markdown_v2(text: str) -> str:
