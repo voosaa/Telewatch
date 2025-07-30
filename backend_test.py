@@ -3589,6 +3589,52 @@ class TelegramBotAPITester:
             'results': nowpayments_tests
         }
 
+    def run_nowpayments_fixes_test(self):
+        """Run focused NOWPayments fixes test - for testing specific fixes"""
+        print("🔧 FOCUSED NOWPAYMENTS FIXES TEST")
+        print("=" * 60)
+        print("Testing specific fixes made to NOWPayments system:")
+        print("1. ✅ Fixed Response Parsing - payment_id field")
+        print("2. ✅ Removed USDT - No longer supported")
+        print("3. ✅ Updated Currency Lists - BTC, ETH, USDC, SOL only")
+        print("4. ✅ Maintained Pricing - Pro ($9.99), Enterprise ($19.99)")
+        print("=" * 60)
+        
+        # Setup authentication first
+        if not self.auth_token:
+            print("Setting up authentication for NOWPayments tests...")
+            self.run_telegram_auth_tests()
+        
+        if self.auth_token:
+            # Run the NOWPayments tests
+            self.run_nowpayments_tests()
+            
+            # Print focused summary on fixes
+            print("\n" + "🔧" * 60)
+            print("FIXES VERIFICATION SUMMARY")
+            print("🔧" * 60)
+            
+            fix_tests = [t for t in self.test_results if any(keyword in t['test'].lower() for keyword in ['fixed', 'usdt rejection', 'payment_id'])]
+            
+            if fix_tests:
+                for test in fix_tests:
+                    status = "✅ PASS" if test['success'] else "❌ FAIL"
+                    print(f"{status} {test['test']}: {test['details']}")
+            
+            # Check specific fix indicators
+            currency_tests = [t for t in self.test_results if 'currencies endpoint' in t['test'].lower()]
+            validation_tests = [t for t in self.test_results if 'usdt' in t['test'].lower()]
+            
+            print(f"\n📊 FIXES STATUS:")
+            print(f"Currency List Fix (No USDT): {'✅ WORKING' if any(t['success'] for t in currency_tests) else '❌ NEEDS ATTENTION'}")
+            print(f"USDT Rejection Fix: {'✅ WORKING' if any(t['success'] for t in validation_tests) else '❌ NEEDS ATTENTION'}")
+            print(f"Response Parsing Fix: {'✅ WORKING' if any('payment_id' in t['test'] and t['success'] for t in self.test_results) else '❌ NEEDS ATTENTION'}")
+            
+        else:
+            print("❌ Could not authenticate - cannot test NOWPayments fixes")
+            
+        return self.test_results
+
     def run_all_tests(self):
         """Run all backend API tests"""
         print("🚀 Starting Comprehensive Backend API Tests")
