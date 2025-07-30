@@ -702,12 +702,13 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Telegram Authentication System - Authentication Verification"
-    - "Telegram Authentication System - User Registration"
-    - "Telegram Authentication System - User Login"
-    - "Telegram Authentication System - Current User Info"
-    - "Telegram Authentication System - User Model Updates"
-    - "Telegram Authentication System - Deprecated Email/Password Login"
+    - "Account Management System - List Accounts API"
+    - "Account Management System - File Upload API"
+    - "Account Management System - Account Deletion API"
+    - "Account Management System - Account Activation API"
+    - "Account Management System - Account Deactivation API"
+    - "Account Management System - File Validation & Storage"
+    - "Account Management System - Authentication & Authorization"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
