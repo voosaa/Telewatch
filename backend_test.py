@@ -1191,7 +1191,504 @@ class TelegramBotAPITester:
         except Exception as e:
             self.log_test("Subscription Management Comprehensive Workflow", False, f"Error: {str(e)}")
 
-    def cleanup_auth_resources(self):
+    def test_account_management_list_accounts(self):
+        """Test GET /api/accounts - List all accounts in organization"""
+        try:
+            response = self.session.get(f"{API_BASE}/accounts")
+            
+            if response.status_code == 200:
+                accounts = response.json()
+                self.log_test("List Accounts API", True, 
+                            f"Successfully retrieved {len(accounts)} accounts", accounts)
+                
+                # Verify response structure if accounts exist
+                if accounts:
+                    account = accounts[0]
+                    required_fields = ['id', 'name', 'status', 'is_active', 'created_at']
+                    missing_fields = [field for field in required_fields if field not in account]
+                    
+                    if not missing_fields:
+                        self.log_test("List Accounts - Response Structure", True, 
+                                    "Account response contains all required fields", account)
+                    else:
+                        self.log_test("List Accounts - Response Structure", False, 
+                                    f"Missing fields in account response: {missing_fields}", account)
+                else:
+                    self.log_test("List Accounts - Empty Response", True, 
+                                "No accounts found (expected for new organization)")
+                    
+            elif response.status_code == 403:
+                self.log_test("List Accounts API", False, 
+                            "Authentication required but request was rejected", response.text)
+            else:
+                self.log_test("List Accounts API", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("List Accounts API", False, f"Error: {str(e)}")
+
+    def test_account_management_file_upload(self):
+        """Test POST /api/accounts/upload - Upload account session and JSON files"""
+        try:
+            # Create mock session file content
+            session_content = b"mock_session_file_content_for_testing"
+            
+            # Create mock JSON file content with account metadata
+            json_content = {
+                "phone_number": "+1234567890",
+                "username": "test_account",
+                "first_name": "Test",
+                "last_name": "Account",
+                "user_id": 123456789,
+                "session_type": "telegram",
+                "created_at": "2025-01-27T10:00:00Z"
+            }
+            json_bytes = json.dumps(json_content).encode('utf-8')
+            
+            # Prepare multipart form data
+            files = {
+                'session_file': ('test_account.session', session_content, 'application/octet-stream'),
+                'json_file': ('test_account.json', json_bytes, 'application/json')
+            }
+            
+            data = {
+                'name': 'Test Account Upload'
+            }
+            
+            # Remove Content-Type header for multipart upload
+            original_headers = self.session.headers.copy()
+            if 'Content-Type' in self.session.headers:
+                del self.session.headers['Content-Type']
+            
+            response = self.session.post(f"{API_BASE}/accounts/upload", files=files, data=data)
+            
+            # Restore headers
+            self.session.headers.update(original_headers)
+            
+            if response.status_code == 200:
+                account = response.json()
+                account_id = account.get('id')
+                
+                # Store for cleanup
+                if account_id:
+                    self.created_resources.setdefault('accounts', []).append(account_id)
+                
+                # Verify response structure
+                required_fields = ['id', 'name', 'status', 'phone_number', 'username', 'first_name', 'last_name']
+                missing_fields = [field for field in required_fields if field not in account]
+                
+                if not missing_fields:
+                    # Verify extracted metadata
+                    if (account.get('phone_number') == json_content['phone_number'] and
+                        account.get('username') == json_content['username'] and
+                        account.get('first_name') == json_content['first_name'] and
+                        account.get('last_name') == json_content['last_name']):
+                        
+                        self.log_test("Account File Upload", True, 
+                                    f"Successfully uploaded account files and extracted metadata", account)
+                    else:
+                        self.log_test("Account File Upload", False, 
+                                    "Metadata extraction from JSON file failed", account)
+                else:
+                    self.log_test("Account File Upload", False, 
+                                f"Missing fields in response: {missing_fields}", account)
+                    
+            elif response.status_code == 403:
+                self.log_test("Account File Upload", False, 
+                            "Admin/Owner permissions required but request was rejected", response.text)
+            else:
+                self.log_test("Account File Upload", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Account File Upload", False, f"Error: {str(e)}")
+
+    def test_account_management_file_validation(self):
+        """Test file validation for account upload"""
+        try:
+            # Test invalid session file extension
+            files = {
+                'session_file': ('test.txt', b"content", 'text/plain'),
+                'json_file': ('test.json', b'{"test": "data"}', 'application/json')
+            }
+            data = {'name': 'Test Invalid Session'}
+            
+            original_headers = self.session.headers.copy()
+            if 'Content-Type' in self.session.headers:
+                del self.session.headers['Content-Type']
+            
+            response = self.session.post(f"{API_BASE}/accounts/upload", files=files, data=data)
+            self.session.headers.update(original_headers)
+            
+            if response.status_code == 400:
+                self.log_test("File Validation - Invalid Session Extension", True, 
+                            "Correctly rejected file without .session extension", response.json())
+            else:
+                self.log_test("File Validation - Invalid Session Extension", False, 
+                            f"Expected HTTP 400 but got {response.status_code}", response.text)
+            
+            # Test invalid JSON file extension
+            files = {
+                'session_file': ('test.session', b"content", 'application/octet-stream'),
+                'json_file': ('test.txt', b'{"test": "data"}', 'text/plain')
+            }
+            data = {'name': 'Test Invalid JSON'}
+            
+            if 'Content-Type' in self.session.headers:
+                del self.session.headers['Content-Type']
+            
+            response = self.session.post(f"{API_BASE}/accounts/upload", files=files, data=data)
+            self.session.headers.update(original_headers)
+            
+            if response.status_code == 400:
+                self.log_test("File Validation - Invalid JSON Extension", True, 
+                            "Correctly rejected file without .json extension", response.json())
+            else:
+                self.log_test("File Validation - Invalid JSON Extension", False, 
+                            f"Expected HTTP 400 but got {response.status_code}", response.text)
+            
+            # Test invalid JSON content
+            files = {
+                'session_file': ('test.session', b"content", 'application/octet-stream'),
+                'json_file': ('test.json', b'invalid json content', 'application/json')
+            }
+            data = {'name': 'Test Invalid JSON Content'}
+            
+            if 'Content-Type' in self.session.headers:
+                del self.session.headers['Content-Type']
+            
+            response = self.session.post(f"{API_BASE}/accounts/upload", files=files, data=data)
+            self.session.headers.update(original_headers)
+            
+            if response.status_code == 400:
+                self.log_test("File Validation - Invalid JSON Content", True, 
+                            "Correctly rejected invalid JSON content", response.json())
+            else:
+                self.log_test("File Validation - Invalid JSON Content", False, 
+                            f"Expected HTTP 400 but got {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("File Validation", False, f"Error: {str(e)}")
+
+    def test_account_management_activation(self):
+        """Test POST /api/accounts/{account_id}/activate - Activate account for monitoring"""
+        # First create an account to activate
+        account_id = self.create_test_account()
+        
+        if not account_id:
+            self.log_test("Account Activation", False, "Could not create test account for activation")
+            return
+        
+        try:
+            response = self.session.post(f"{API_BASE}/accounts/{account_id}/activate")
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('message') == 'Account activated successfully':
+                    self.log_test("Account Activation", True, 
+                                "Successfully activated account for monitoring", result)
+                    
+                    # Verify account status was updated
+                    verify_response = self.session.get(f"{API_BASE}/accounts")
+                    if verify_response.status_code == 200:
+                        accounts = verify_response.json()
+                        activated_account = next((acc for acc in accounts if acc['id'] == account_id), None)
+                        
+                        if activated_account and activated_account.get('status') == 'active':
+                            self.log_test("Account Activation - Status Update", True, 
+                                        "Account status correctly updated to 'active'", activated_account)
+                        else:
+                            self.log_test("Account Activation - Status Update", False, 
+                                        "Account status not updated correctly", activated_account)
+                else:
+                    self.log_test("Account Activation", False, 
+                                "Unexpected response message", result)
+            elif response.status_code == 404:
+                self.log_test("Account Activation", False, 
+                            "Account not found (may be organization scoping issue)", response.text)
+            elif response.status_code == 403:
+                self.log_test("Account Activation", False, 
+                            "Admin/Owner permissions required but request was rejected", response.text)
+            else:
+                self.log_test("Account Activation", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Account Activation", False, f"Error: {str(e)}")
+
+    def test_account_management_deactivation(self):
+        """Test POST /api/accounts/{account_id}/deactivate - Deactivate account monitoring"""
+        # First create and activate an account to deactivate
+        account_id = self.create_test_account()
+        
+        if not account_id:
+            self.log_test("Account Deactivation", False, "Could not create test account for deactivation")
+            return
+        
+        # Activate it first
+        self.session.post(f"{API_BASE}/accounts/{account_id}/activate")
+        
+        try:
+            response = self.session.post(f"{API_BASE}/accounts/{account_id}/deactivate")
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('message') == 'Account deactivated successfully':
+                    self.log_test("Account Deactivation", True, 
+                                "Successfully deactivated account monitoring", result)
+                    
+                    # Verify account status was updated
+                    verify_response = self.session.get(f"{API_BASE}/accounts")
+                    if verify_response.status_code == 200:
+                        accounts = verify_response.json()
+                        deactivated_account = next((acc for acc in accounts if acc['id'] == account_id), None)
+                        
+                        if deactivated_account and deactivated_account.get('status') == 'inactive':
+                            self.log_test("Account Deactivation - Status Update", True, 
+                                        "Account status correctly updated to 'inactive'", deactivated_account)
+                        else:
+                            self.log_test("Account Deactivation - Status Update", False, 
+                                        "Account status not updated correctly", deactivated_account)
+                else:
+                    self.log_test("Account Deactivation", False, 
+                                "Unexpected response message", result)
+            elif response.status_code == 404:
+                self.log_test("Account Deactivation", False, 
+                            "Account not found (may be organization scoping issue)", response.text)
+            elif response.status_code == 403:
+                self.log_test("Account Deactivation", False, 
+                            "Admin/Owner permissions required but request was rejected", response.text)
+            else:
+                self.log_test("Account Deactivation", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Account Deactivation", False, f"Error: {str(e)}")
+
+    def test_account_management_deletion(self):
+        """Test DELETE /api/accounts/{account_id} - Delete account and associated files"""
+        # First create an account to delete
+        account_id = self.create_test_account()
+        
+        if not account_id:
+            self.log_test("Account Deletion", False, "Could not create test account for deletion")
+            return
+        
+        try:
+            response = self.session.delete(f"{API_BASE}/accounts/{account_id}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('message') == 'Account deleted successfully':
+                    self.log_test("Account Deletion", True, 
+                                "Successfully deleted account and associated files", result)
+                    
+                    # Verify account is no longer in the list
+                    verify_response = self.session.get(f"{API_BASE}/accounts")
+                    if verify_response.status_code == 200:
+                        accounts = verify_response.json()
+                        deleted_account = next((acc for acc in accounts if acc['id'] == account_id), None)
+                        
+                        if not deleted_account:
+                            self.log_test("Account Deletion - Cleanup Verification", True, 
+                                        "Account successfully removed from database")
+                            # Remove from cleanup list since it's already deleted
+                            if account_id in self.created_resources.get('accounts', []):
+                                self.created_resources['accounts'].remove(account_id)
+                        else:
+                            self.log_test("Account Deletion - Cleanup Verification", False, 
+                                        "Account still exists in database after deletion", deleted_account)
+                else:
+                    self.log_test("Account Deletion", False, 
+                                "Unexpected response message", result)
+            elif response.status_code == 404:
+                self.log_test("Account Deletion", False, 
+                            "Account not found (may be organization scoping issue)", response.text)
+            elif response.status_code == 403:
+                self.log_test("Account Deletion", False, 
+                            "Admin/Owner permissions required but request was rejected", response.text)
+            else:
+                self.log_test("Account Deletion", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Account Deletion", False, f"Error: {str(e)}")
+
+    def test_account_management_authentication(self):
+        """Test authentication and authorization for account endpoints"""
+        # Save current auth header
+        auth_header = self.session.headers.get('Authorization')
+        
+        try:
+            # Remove auth header
+            if 'Authorization' in self.session.headers:
+                del self.session.headers['Authorization']
+            
+            # Test GET /api/accounts without auth
+            response = self.session.get(f"{API_BASE}/accounts")
+            if response.status_code == 403:
+                self.log_test("Account Auth - List Accounts", True, 
+                            "Correctly rejected unauthenticated request with HTTP 403")
+            else:
+                self.log_test("Account Auth - List Accounts", False, 
+                            f"Expected HTTP 403 but got {response.status_code}")
+            
+            # Test POST /api/accounts/upload without auth
+            files = {
+                'session_file': ('test.session', b"content", 'application/octet-stream'),
+                'json_file': ('test.json', b'{"test": "data"}', 'application/json')
+            }
+            data = {'name': 'Test Auth'}
+            
+            response = self.session.post(f"{API_BASE}/accounts/upload", files=files, data=data)
+            if response.status_code == 403:
+                self.log_test("Account Auth - Upload", True, 
+                            "Correctly rejected unauthenticated upload with HTTP 403")
+            else:
+                self.log_test("Account Auth - Upload", False, 
+                            f"Expected HTTP 403 but got {response.status_code}")
+            
+            # Test DELETE without auth
+            response = self.session.delete(f"{API_BASE}/accounts/test-id")
+            if response.status_code == 403:
+                self.log_test("Account Auth - Delete", True, 
+                            "Correctly rejected unauthenticated delete with HTTP 403")
+            else:
+                self.log_test("Account Auth - Delete", False, 
+                            f"Expected HTTP 403 but got {response.status_code}")
+            
+            # Test activate without auth
+            response = self.session.post(f"{API_BASE}/accounts/test-id/activate")
+            if response.status_code == 403:
+                self.log_test("Account Auth - Activate", True, 
+                            "Correctly rejected unauthenticated activate with HTTP 403")
+            else:
+                self.log_test("Account Auth - Activate", False, 
+                            f"Expected HTTP 403 but got {response.status_code}")
+            
+            # Test deactivate without auth
+            response = self.session.post(f"{API_BASE}/accounts/test-id/deactivate")
+            if response.status_code == 403:
+                self.log_test("Account Auth - Deactivate", True, 
+                            "Correctly rejected unauthenticated deactivate with HTTP 403")
+            else:
+                self.log_test("Account Auth - Deactivate", False, 
+                            f"Expected HTTP 403 but got {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Account Authentication", False, f"Error: {str(e)}")
+        finally:
+            # Restore auth header
+            if auth_header:
+                self.session.headers['Authorization'] = auth_header
+
+    def create_test_account(self):
+        """Helper method to create a test account for testing other operations"""
+        try:
+            # Create mock files
+            session_content = b"mock_session_for_testing"
+            json_content = {
+                "phone_number": "+1234567890",
+                "username": "test_helper_account",
+                "first_name": "Helper",
+                "last_name": "Account"
+            }
+            json_bytes = json.dumps(json_content).encode('utf-8')
+            
+            files = {
+                'session_file': ('helper.session', session_content, 'application/octet-stream'),
+                'json_file': ('helper.json', json_bytes, 'application/json')
+            }
+            
+            data = {'name': 'Helper Test Account'}
+            
+            # Remove Content-Type header for multipart upload
+            original_headers = self.session.headers.copy()
+            if 'Content-Type' in self.session.headers:
+                del self.session.headers['Content-Type']
+            
+            response = self.session.post(f"{API_BASE}/accounts/upload", files=files, data=data)
+            
+            # Restore headers
+            self.session.headers.update(original_headers)
+            
+            if response.status_code == 200:
+                account = response.json()
+                account_id = account.get('id')
+                
+                # Store for cleanup
+                if account_id:
+                    self.created_resources.setdefault('accounts', []).append(account_id)
+                
+                return account_id
+            else:
+                return None
+                
+        except Exception as e:
+            print(f"Error creating test account: {e}")
+            return None
+
+    def cleanup_accounts(self):
+        """Clean up created test accounts"""
+        if 'accounts' in self.created_resources:
+            for account_id in self.created_resources['accounts']:
+                try:
+                    response = self.session.delete(f"{API_BASE}/accounts/{account_id}")
+                    if response.status_code == 200:
+                        print(f"✅ Cleaned up account: {account_id}")
+                    else:
+                        print(f"⚠️  Failed to clean up account: {account_id}")
+                except Exception as e:
+                    print(f"❌ Error cleaning up account {account_id}: {e}")
+
+    def run_account_management_tests(self):
+        """Run all Account Management System tests"""
+        print("🚀 Starting Account Management System Tests")
+        print("=" * 60)
+        
+        # Test all account management endpoints
+        self.test_account_management_list_accounts()
+        self.test_account_management_file_upload()
+        self.test_account_management_file_validation()
+        self.test_account_management_activation()
+        self.test_account_management_deactivation()
+        self.test_account_management_deletion()
+        self.test_account_management_authentication()
+        
+        # Cleanup
+        self.cleanup_accounts()
+        
+        print("\n" + "=" * 60)
+        print("📊 ACCOUNT MANAGEMENT SYSTEM TEST SUMMARY")
+        print("=" * 60)
+        
+        # Filter results for Account Management tests
+        account_tests = [t for t in self.test_results if 'account' in t['test'].lower()]
+        
+        total_tests = len(account_tests)
+        passed_tests = len([t for t in account_tests if t['success']])
+        failed_tests = total_tests - passed_tests
+        
+        print(f"Total Account Management Tests: {total_tests}")
+        print(f"✅ Passed: {passed_tests}")
+        print(f"❌ Failed: {failed_tests}")
+        print(f"Success Rate: {(passed_tests/total_tests)*100:.1f}%" if total_tests > 0 else "No tests run")
+        
+        if failed_tests > 0:
+            print("\n❌ FAILED ACCOUNT MANAGEMENT TESTS:")
+            for test in account_tests:
+                if not test['success']:
+                    print(f"  • {test['test']}: {test['details']}")
+        
+        print("\n" + "=" * 60)
+        
+        return {
+            'total': total_tests,
+            'passed': passed_tests,
+            'failed': failed_tests,
+            'success_rate': (passed_tests/total_tests)*100 if total_tests > 0 else 0,
+            'results': account_tests
+        }
         """Clean up authentication-related test resources"""
         print("\n🧹 Cleaning up authentication resources...")
         
