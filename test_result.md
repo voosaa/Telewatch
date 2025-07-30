@@ -492,6 +492,90 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Complete subscription management system working perfectly with 100% success rate (18/18 tests passed). GET /api/organizations/current returns organization with plan field, PUT /api/organizations/current supports plan updates (free, pro, enterprise). Plan validation working correctly - invalid plans rejected with HTTP 422. Authentication required (HTTP 403 for unauthenticated requests). Owner permissions enforced. Data integrity maintained through plan updates. Complete workflow tested: free→pro→enterprise→free transitions. Backend fully supports frontend subscription management page."
 
+  - task: "Account Management System - List Accounts API"
+    implemented: true
+    working: "NA"
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented GET /api/accounts endpoint to list all accounts in current organization with proper authentication and tenant isolation. Returns AccountResponse objects with account details including status, phone_number, username, and metadata."
+
+  - task: "Account Management System - File Upload API"
+    implemented: true
+    working: "NA"
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented POST /api/accounts/upload endpoint for uploading session and JSON files. Includes file extension validation (.session and .json), unique filename generation, JSON metadata extraction, and proper file storage in /app/uploads/sessions and /app/uploads/json directories. Requires admin/owner permissions."
+
+  - task: "Account Management System - Account Deletion API"
+    implemented: true
+    working: "NA"
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented DELETE /api/accounts/{account_id} endpoint to delete account and associated files. Includes proper file cleanup from filesystem, database record deletion, and organization-scoped access control. Requires admin/owner permissions."
+
+  - task: "Account Management System - Account Activation API"
+    implemented: true
+    working: "NA"
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented POST /api/accounts/{account_id}/activate endpoint to activate account for monitoring. Updates account status to ACTIVE, clears error messages, and includes proper error handling with status updates to ERROR state on failures. Requires admin/owner permissions."
+
+  - task: "Account Management System - Account Deactivation API"
+    implemented: true
+    working: "NA"
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented POST /api/accounts/{account_id}/deactivate endpoint to deactivate account monitoring. Updates account status to INACTIVE with proper error handling and organization-scoped access control. Requires admin/owner permissions."
+
+  - task: "Account Management System - File Validation & Storage"
+    implemented: true
+    working: "NA"
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented comprehensive file validation system with .session and .json extension checks, unique filename generation using organization_id and timestamps, proper file storage in dedicated directories, and JSON metadata extraction and storage in Account model."
+
+  - task: "Account Management System - Authentication & Authorization"
+    implemented: true
+    working: "NA"
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented proper authentication and authorization for all account endpoints using require_admin dependency. Ensures only admin/owner users can manage accounts, with proper tenant isolation so users can only access accounts from their organization."
+
 frontend:
   - task: "Telegram Authentication UI - Login Widget Integration"
     implemented: true
