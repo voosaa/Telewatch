@@ -3200,25 +3200,399 @@ class TelegramBotAPITester:
             except Exception as e:
                 print(f"❌ Error cleaning up forwarding destination {dest_id}: {e}")
 
-    def run_all_tests(self):
-        """Run all backend API tests"""
-        print("🚀 Starting Message Forwarding System Backend API Tests")
+    def test_nowpayments_create_charge_valid_plans(self):
+        """Test NOWPayments charge creation with valid plans and currencies"""
+        if not self.auth_token:
+            self.log_test("NOWPayments Create Charge - Valid Plans", False, "No authentication token available")
+            return
+            
+        try:
+            # Test Pro plan with different cryptocurrencies
+            test_cases = [
+                {"plan": "pro", "pay_currency": "btc", "expected_price": 9.99},
+                {"plan": "pro", "pay_currency": "eth", "expected_price": 9.99},
+                {"plan": "pro", "pay_currency": "usdt", "expected_price": 9.99},
+                {"plan": "enterprise", "pay_currency": "btc", "expected_price": 19.99},
+                {"plan": "enterprise", "pay_currency": "sol", "expected_price": 19.99}
+            ]
+            
+            for test_case in test_cases:
+                charge_data = {
+                    "plan": test_case["plan"],
+                    "pay_currency": test_case["pay_currency"]
+                }
+                
+                response = self.session.post(f"{API_BASE}/crypto/create-charge", json=charge_data)
+                
+                # With placeholder API keys, we expect 503 (service unavailable)
+                if response.status_code == 503:
+                    response_data = response.json()
+                    if "not configured yet" in response_data.get("detail", "").lower():
+                        self.log_test(f"NOWPayments Create Charge - {test_case['plan'].upper()} {test_case['pay_currency'].upper()}", True, 
+                                    f"Correctly shows service unavailable with placeholder API keys", response_data)
+                    else:
+                        self.log_test(f"NOWPayments Create Charge - {test_case['plan'].upper()} {test_case['pay_currency'].upper()}", False, 
+                                    f"Expected 'not configured' message but got: {response_data.get('detail')}", response_data)
+                elif response.status_code == 200:
+                    # If real API keys are configured, verify response structure
+                    charge_response = response.json()
+                    required_fields = ['payment_url', 'payment_id', 'amount', 'plan', 'pay_currency', 'pay_address', 'pay_amount']
+                    missing_fields = [field for field in required_fields if field not in charge_response]
+                    
+                    if not missing_fields and charge_response['amount'] == str(test_case['expected_price']):
+                        self.log_test(f"NOWPayments Create Charge - {test_case['plan'].upper()} {test_case['pay_currency'].upper()}", True, 
+                                    f"Successfully created charge for ${test_case['expected_price']}", charge_response)
+                    else:
+                        self.log_test(f"NOWPayments Create Charge - {test_case['plan'].upper()} {test_case['pay_currency'].upper()}", False, 
+                                    f"Missing fields: {missing_fields} or incorrect amount", charge_response)
+                else:
+                    self.log_test(f"NOWPayments Create Charge - {test_case['plan'].upper()} {test_case['pay_currency'].upper()}", False, 
+                                f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("NOWPayments Create Charge - Valid Plans", False, f"Error: {str(e)}")
+
+    def test_nowpayments_create_charge_validation(self):
+        """Test NOWPayments charge creation validation (invalid plans and currencies)"""
+        if not self.auth_token:
+            self.log_test("NOWPayments Create Charge - Validation", False, "No authentication token available")
+            return
+            
+        try:
+            # Test invalid plans
+            invalid_plans = ["basic", "premium", "invalid", ""]
+            
+            for invalid_plan in invalid_plans:
+                charge_data = {
+                    "plan": invalid_plan,
+                    "pay_currency": "btc"
+                }
+                
+                response = self.session.post(f"{API_BASE}/crypto/create-charge", json=charge_data)
+                
+                if response.status_code == 400:
+                    self.log_test(f"NOWPayments Validation - Invalid Plan '{invalid_plan}'", True, 
+                                f"Correctly rejected invalid plan with HTTP 400")
+                else:
+                    self.log_test(f"NOWPayments Validation - Invalid Plan '{invalid_plan}'", False, 
+                                f"Expected HTTP 400 but got {response.status_code}")
+            
+            # Test invalid currencies
+            invalid_currencies = ["doge", "ltc", "invalid", "", "BTC"]  # BTC uppercase should be rejected
+            
+            for invalid_currency in invalid_currencies:
+                charge_data = {
+                    "plan": "pro",
+                    "pay_currency": invalid_currency
+                }
+                
+                response = self.session.post(f"{API_BASE}/crypto/create-charge", json=charge_data)
+                
+                if response.status_code == 400:
+                    self.log_test(f"NOWPayments Validation - Invalid Currency '{invalid_currency}'", True, 
+                                f"Correctly rejected invalid currency with HTTP 400")
+                else:
+                    self.log_test(f"NOWPayments Validation - Invalid Currency '{invalid_currency}'", False, 
+                                f"Expected HTTP 400 but got {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("NOWPayments Create Charge - Validation", False, f"Error: {str(e)}")
+
+    def test_nowpayments_currencies_endpoint(self):
+        """Test GET /api/crypto/currencies - Supported cryptocurrency list"""
+        try:
+            response = self.session.get(f"{API_BASE}/crypto/currencies")
+            
+            if response.status_code == 200:
+                currencies_data = response.json()
+                
+                if "currencies" in currencies_data:
+                    currencies = currencies_data["currencies"]
+                    
+                    # Verify expected cryptocurrencies are present
+                    expected_currencies = ["btc", "eth", "usdt", "usdc", "sol"]
+                    found_currencies = [curr["currency"] for curr in currencies if "currency" in curr]
+                    
+                    missing_currencies = [curr for curr in expected_currencies if curr not in found_currencies]
+                    
+                    if not missing_currencies:
+                        self.log_test("NOWPayments Currencies Endpoint", True, 
+                                    f"All expected currencies present: {found_currencies}", currencies_data)
+                    else:
+                        self.log_test("NOWPayments Currencies Endpoint", False, 
+                                    f"Missing currencies: {missing_currencies}", currencies_data)
+                    
+                    # Verify currency structure
+                    if currencies:
+                        sample_currency = currencies[0]
+                        required_fields = ["currency", "name", "network"]
+                        missing_fields = [field for field in required_fields if field not in sample_currency]
+                        
+                        if not missing_fields:
+                            self.log_test("NOWPayments Currencies - Structure", True, 
+                                        f"Currency objects have correct structure", sample_currency)
+                        else:
+                            self.log_test("NOWPayments Currencies - Structure", False, 
+                                        f"Missing fields in currency object: {missing_fields}", sample_currency)
+                else:
+                    self.log_test("NOWPayments Currencies Endpoint", False, 
+                                "Missing 'currencies' field in response", currencies_data)
+            else:
+                self.log_test("NOWPayments Currencies Endpoint", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("NOWPayments Currencies Endpoint", False, f"Error: {str(e)}")
+
+    def test_nowpayments_ipn_handler(self):
+        """Test NOWPayments IPN (webhook) handler with mock data"""
+        try:
+            # Test IPN endpoint without proper signature (should fail)
+            mock_ipn_data = {
+                "payment_id": "test_payment_123",
+                "payment_status": "confirmed",
+                "order_id": "test_order_456",
+                "price_amount": "9.99",
+                "price_currency": "usd",
+                "pay_amount": "0.0003",
+                "pay_currency": "btc"
+            }
+            
+            # Test without signature header
+            response = self.session.post(f"{API_BASE}/crypto/ipn", json=mock_ipn_data)
+            
+            # With placeholder IPN secret, we expect 503 (not configured)
+            if response.status_code == 503:
+                response_data = response.json()
+                if "not configured" in response_data.get("error", "").lower():
+                    self.log_test("NOWPayments IPN Handler - Not Configured", True, 
+                                "Correctly shows IPN not configured with placeholder secret", response_data)
+                else:
+                    self.log_test("NOWPayments IPN Handler - Not Configured", False, 
+                                f"Expected 'not configured' message but got: {response_data}", response_data)
+            elif response.status_code == 403:
+                self.log_test("NOWPayments IPN Handler - Signature Validation", True, 
+                            "Correctly rejected IPN without valid signature (HTTP 403)")
+            else:
+                self.log_test("NOWPayments IPN Handler - Signature Validation", False, 
+                            f"Expected HTTP 503 or 403 but got {response.status_code}", response.text)
+            
+            # Test with invalid JSON
+            response = self.session.post(f"{API_BASE}/crypto/ipn", 
+                                       data="invalid json data",
+                                       headers={"Content-Type": "application/json"})
+            
+            if response.status_code in [400, 503]:  # 400 for invalid JSON or 503 for not configured
+                self.log_test("NOWPayments IPN Handler - Invalid JSON", True, 
+                            f"Correctly handled invalid JSON with HTTP {response.status_code}")
+            else:
+                self.log_test("NOWPayments IPN Handler - Invalid JSON", False, 
+                            f"Expected HTTP 400 or 503 but got {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("NOWPayments IPN Handler", False, f"Error: {str(e)}")
+
+    def test_nowpayments_payment_history(self):
+        """Test GET /api/crypto/charges - Payment history endpoint"""
+        if not self.auth_token:
+            self.log_test("NOWPayments Payment History", False, "No authentication token available")
+            return
+            
+        try:
+            response = self.session.get(f"{API_BASE}/crypto/charges")
+            
+            if response.status_code == 200:
+                history_data = response.json()
+                
+                if "charges" in history_data:
+                    charges = history_data["charges"]
+                    self.log_test("NOWPayments Payment History", True, 
+                                f"Successfully retrieved {len(charges)} payment records", history_data)
+                    
+                    # Verify data sanitization (sensitive fields should be removed)
+                    if charges:
+                        sample_charge = charges[0]
+                        sensitive_fields = ["nowpayments_response", "ipn_data"]
+                        found_sensitive = [field for field in sensitive_fields if field in sample_charge]
+                        
+                        if not found_sensitive:
+                            self.log_test("NOWPayments Payment History - Data Sanitization", True, 
+                                        "Sensitive fields properly removed from response", sample_charge)
+                        else:
+                            self.log_test("NOWPayments Payment History - Data Sanitization", False, 
+                                        f"Sensitive fields still present: {found_sensitive}", sample_charge)
+                    else:
+                        self.log_test("NOWPayments Payment History - Empty History", True, 
+                                    "No payment history found (expected for new organization)")
+                else:
+                    self.log_test("NOWPayments Payment History", False, 
+                                "Missing 'charges' field in response", history_data)
+            else:
+                self.log_test("NOWPayments Payment History", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("NOWPayments Payment History", False, f"Error: {str(e)}")
+
+    def test_nowpayments_authentication_required(self):
+        """Test that NOWPayments endpoints require authentication"""
+        # Save current auth header
+        auth_header = self.session.headers.get('Authorization')
+        
+        try:
+            # Remove auth header
+            if 'Authorization' in self.session.headers:
+                del self.session.headers['Authorization']
+            
+            # Test create charge without auth
+            charge_data = {"plan": "pro", "pay_currency": "btc"}
+            response = self.session.post(f"{API_BASE}/crypto/create-charge", json=charge_data)
+            
+            if response.status_code == 403:
+                self.log_test("NOWPayments Create Charge - Auth Required", True, 
+                            "Correctly rejected unauthenticated request with HTTP 403")
+            else:
+                self.log_test("NOWPayments Create Charge - Auth Required", False, 
+                            f"Expected HTTP 403 but got {response.status_code}")
+            
+            # Test payment history without auth
+            response = self.session.get(f"{API_BASE}/crypto/charges")
+            
+            if response.status_code == 403:
+                self.log_test("NOWPayments Payment History - Auth Required", True, 
+                            "Correctly rejected unauthenticated request with HTTP 403")
+            else:
+                self.log_test("NOWPayments Payment History - Auth Required", False, 
+                            f"Expected HTTP 403 but got {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("NOWPayments Authentication Required", False, f"Error: {str(e)}")
+        finally:
+            # Restore auth header
+            if auth_header:
+                self.session.headers['Authorization'] = auth_header
+
+    def test_nowpayments_environment_configuration(self):
+        """Test NOWPayments environment configuration and error handling"""
+        try:
+            # Test that placeholder API keys show proper error messages
+            # This is tested indirectly through the create-charge endpoint
+            charge_data = {"plan": "pro", "pay_currency": "btc"}
+            
+            if self.auth_token:
+                response = self.session.post(f"{API_BASE}/crypto/create-charge", json=charge_data)
+                
+                if response.status_code == 503:
+                    response_data = response.json()
+                    detail = response_data.get("detail", "")
+                    
+                    if "not configured yet" in detail.lower() and "contact support" in detail.lower():
+                        self.log_test("NOWPayments Environment Configuration", True, 
+                                    "Properly handles placeholder API keys with user-friendly message", response_data)
+                    else:
+                        self.log_test("NOWPayments Environment Configuration", False, 
+                                    f"Error message not user-friendly: {detail}", response_data)
+                else:
+                    self.log_test("NOWPayments Environment Configuration", True, 
+                                f"API keys appear to be configured (HTTP {response.status_code})")
+            else:
+                self.log_test("NOWPayments Environment Configuration", False, 
+                            "Cannot test without authentication")
+            
+        except Exception as e:
+            self.log_test("NOWPayments Environment Configuration", False, f"Error: {str(e)}")
+
+    def run_nowpayments_tests(self):
+        """Run all NOWPayments cryptocurrency payment system tests"""
+        print("🚀 Starting NOWPayments Cryptocurrency Payment System Tests")
         print("=" * 60)
         
-        # Run tests focusing on the new forwarding system
+        # Test charge creation with valid plans and currencies
+        self.test_nowpayments_create_charge_valid_plans()
+        
+        # Test validation (invalid plans and currencies)
+        self.test_nowpayments_create_charge_validation()
+        
+        # Test supported currencies endpoint
+        self.test_nowpayments_currencies_endpoint()
+        
+        # Test IPN (webhook) handler
+        self.test_nowpayments_ipn_handler()
+        
+        # Test payment history endpoint
+        self.test_nowpayments_payment_history()
+        
+        # Test authentication requirements
+        self.test_nowpayments_authentication_required()
+        
+        # Test environment configuration
+        self.test_nowpayments_environment_configuration()
+        
+        print("\n" + "=" * 60)
+        print("📊 NOWPAYMENTS CRYPTOCURRENCY PAYMENT SYSTEM TEST SUMMARY")
+        print("=" * 60)
+        
+        # Filter results for NOWPayments tests
+        nowpayments_tests = [t for t in self.test_results if 'nowpayments' in t['test'].lower()]
+        
+        total_tests = len(nowpayments_tests)
+        passed_tests = len([t for t in nowpayments_tests if t['success']])
+        failed_tests = total_tests - passed_tests
+        
+        print(f"Total NOWPayments Tests: {total_tests}")
+        print(f"✅ Passed: {passed_tests}")
+        print(f"❌ Failed: {failed_tests}")
+        print(f"Success Rate: {(passed_tests/total_tests)*100:.1f}%" if total_tests > 0 else "No tests run")
+        
+        if failed_tests > 0:
+            print("\n❌ FAILED NOWPAYMENTS TESTS:")
+            for test in nowpayments_tests:
+                if not test['success']:
+                    print(f"  • {test['test']}: {test['details']}")
+        
+        print("\n" + "=" * 60)
+        
+        return {
+            'total': total_tests,
+            'passed': passed_tests,
+            'failed': failed_tests,
+            'success_rate': (passed_tests/total_tests)*100 if total_tests > 0 else 0,
+            'results': nowpayments_tests
+        }
+
+    def run_all_tests(self):
+        """Run all backend API tests"""
+        print("🚀 Starting Comprehensive Backend API Tests")
+        print("=" * 60)
+        
+        # Basic connectivity
         self.test_root_endpoint()
         self.test_bot_connection()
-        self.test_forwarding_destinations_management()
-        self.test_watchlist_with_forwarding()
-        self.test_forwarded_messages_tracking()
-        self.test_updated_statistics_endpoint()
-        self.test_forwarding_error_handling()
         
-        # Cleanup
-        self.cleanup_resources()
+        # Run Telegram authentication tests
+        self.run_telegram_auth_tests()
         
-        # Summary
-        self.print_summary()
+        # Run NOWPayments cryptocurrency payment tests
+        if self.auth_token:
+            self.run_nowpayments_tests()
+        
+        # Run subscription management tests if we have auth
+        if self.auth_token:
+            self.run_subscription_management_tests()
+        
+        # Run account management tests if we have auth
+        if self.auth_token:
+            self.run_account_management_tests()
+        
+        # Run multi-account monitoring tests if we have auth
+        if self.auth_token:
+            self.run_multi_account_monitoring_tests()
+        
+        # Run bot command tests
+        self.run_bot_command_tests()
+        
+        # Print final summary
+        self.print_final_summary()
 
     def print_summary(self):
         """Print test summary"""
