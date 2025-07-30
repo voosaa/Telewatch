@@ -3755,10 +3755,11 @@ async def setup_bot_handlers():
         await bot_application.initialize()
         await bot_application.start()
         
-        # Start polling in background
-        asyncio.create_task(bot_application.run_polling(stop_signals=None))
+        # Set webhook for production
+        webhook_url = f"https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com/api/telegram/webhook/{os.environ.get('WEBHOOK_SECRET')}"
+        await bot.set_webhook(url=webhook_url)
         
-        logger.info("✅ Telegram bot handlers setup complete and polling started")
+        logger.info(f"✅ Telegram bot handlers setup complete and webhook set to: {webhook_url}")
         return True
         
     except Exception as e:
