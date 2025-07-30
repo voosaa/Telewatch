@@ -3755,7 +3755,10 @@ async def setup_bot_handlers():
         await bot_application.initialize()
         await bot_application.start()
         
-        logger.info("✅ Telegram bot handlers setup complete")
+        # Start polling in background
+        asyncio.create_task(bot_application.run_polling(stop_signals=None))
+        
+        logger.info("✅ Telegram bot handlers setup complete and polling started")
         return True
         
     except Exception as e:
