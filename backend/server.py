@@ -2624,7 +2624,7 @@ class UserAccountManager:
             
             await db.forwarded_messages.insert_one(forwarded_log.dict())
             
-            logger.debug(f"Message forwarded to {destination['name']} via account {forwarding_account_id}")
+            logger.debug(f"Message forwarded to {destination['destination_name']} via account {forwarding_account_id}")
             
         except Exception as e:
             logger.error(f"Error forwarding message via account {forwarding_account_id}: {e}")
