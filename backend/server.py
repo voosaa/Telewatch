@@ -26,6 +26,13 @@ import json
 import os
 from pathlib import Path
 from enum import Enum
+from telethon import TelegramClient, events
+from telethon.sessions import StringSession
+import asyncio
+from typing import Dict, List, Set
+from concurrent.futures import ThreadPoolExecutor
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
