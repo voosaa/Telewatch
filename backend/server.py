@@ -2507,6 +2507,112 @@ class UserAccountManager:
         except Exception as e:
             logger.error(f"Error processing message from account {account_id}: {e}")
     
+    async def process_message_forwarding_with_load_balancing(self, message_data: dict, organization_id: str, detected_by_account: str):
+        """Enhanced message forwarding with load balancing across accounts"""
+        try:
+            # Get forwarding destinations for this organization
+            destinations = await db.forwarding_destinations.find({
+                "tenant_id": organization_id,
+                "is_active": True
+            }).to_list(100)
+            
+            for destination in destinations:
+                # Check if this message should be forwarded based on filters
+                should_forward = True
+                
+                # Group filter
+                if destination.get('source_groups') and message_data['group_id'] not in destination['source_groups']:
+                    should_forward = False
+                
+                # User filter
+                if should_forward and destination.get('user_filters'):
+                    user_match = False
+                    for user_filter in destination['user_filters']:
+                        if (user_filter.get('user_id') == message_data['user_id'] or
+                            user_filter.get('username') == message_data['username']):
+                            user_match = True
+                            break
+                    if not user_match:
+                        should_forward = False
+                
+                if should_forward:
+                    # Use load balancer to select best account for forwarding
+                    available_accounts = list(self.active_clients.keys())
+                    best_account = load_balancer.get_best_account_for_forwarding(available_accounts)
+                    
+                    if best_account:
+                        await self.forward_message_to_destination(message_data, destination, best_account)
+                    else:
+                        logger.warning("No available accounts for message forwarding")
+            
+        except Exception as e:
+            logger.error(f"Error processing message forwarding with load balancing: {e}")
+    
+    async def forward_message_to_destination(self, message_data: dict, destination: dict, forwarding_account_id: str):
+        """Enhanced message forwarding with better formatting and error handling"""
+        try:
+            client = self.active_clients.get(forwarding_account_id)
+            if not client:
+                logger.error(f"Forwarding account {forwarding_account_id} not available")
+                return
+            
+            # Format forwarded message with more details
+            forward_text = "🔍 **Monitored Message Alert**\n"
+            forward_text += "=" * 30 + "\n\n"
+            forward_text += f"📱 **Source Group:** {message_data['group_name']}\n"
+            forward_text += f"👤 **User:** {message_data['first_name']} {message_data['last_name']}"
+            
+            if message_data['username']:
+                forward_text += f" (@{message_data['username']})"
+            forward_text += f"\n🆔 **User ID:** {message_data['user_id']}\n"
+            forward_text += f"⏰ **Time:** {message_data['message_date'].strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+            forward_text += f"🔍 **Detected by:** Account {forwarding_account_id}\n"
+            
+            if message_data['media_type']:
+                forward_text += f"📎 **Media:** {message_data['media_type'].title()}\n"
+            
+            if message_data['is_edited']:
+                forward_text += "✏️ **Message was edited**\n"
+            
+            forward_text += "\n" + "=" * 30 + "\n"
+            forward_text += "💬 **Message Content:**\n\n"
+            forward_text += message_data['message_text'] or "*No text content*"
+            
+            # Add rate limiting check
+            rate_limit_key = f"forward_{destination['destination_chat_id']}_{datetime.now().strftime('%Y%m%d%H%M')}"
+            
+            # Send to destination
+            await client.send_message(
+                entity=int(destination['destination_chat_id']),
+                message=forward_text
+            )
+            
+            # Log forwarded message with enhanced data
+            forwarded_log = ForwardedMessage(
+                original_message_id=message_data['message_id'],
+                source_group_id=message_data['group_id'],
+                destination_chat_id=destination['destination_chat_id'],
+                destination_name=destination['name'],
+                forwarded_at=datetime.now(timezone.utc),
+                tenant_id=destination['tenant_id'],
+                created_by=destination['created_by'],
+                forwarded_by_account=forwarding_account_id,
+                detected_by_account=message_data['detected_by_account']
+            )
+            
+            await db.forwarded_messages.insert_one(forwarded_log.dict())
+            
+            logger.debug(f"Message forwarded to {destination['name']} via account {forwarding_account_id}")
+            
+        except Exception as e:
+            logger.error(f"Error forwarding message via account {forwarding_account_id}: {e}")
+            
+            # Try with fallback account if available
+            available_accounts = [aid for aid in self.active_clients.keys() if aid != forwarding_account_id]
+            if available_accounts:
+                fallback_account = available_accounts[0]
+                logger.info(f"Retrying forward with fallback account {fallback_account}")
+                await self.forward_message_to_destination(message_data, destination, fallback_account)
     async def check_watchlist_filters(self, message_data: dict, organization_id: str) -> bool:
         """Check if message matches watchlist filters"""
         try:
