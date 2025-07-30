@@ -282,7 +282,8 @@ class ForwardedMessage(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tenant_id: str  # Organization ID for multi-tenancy
     original_message_id: str
-    from_group_id: str
+    source_group_id: str
+    from_group_id: str  # Keep for backward compatibility
     from_group_name: str
     from_user_id: str
     from_username: str
@@ -295,6 +296,11 @@ class ForwardedMessage(BaseModel):
     matched_keywords: List[str] = []
     forwarding_status: str = "success"  # success, failed, partial
     error_details: Optional[str] = None
+    destination_chat_id: Optional[str] = None
+    destination_name: Optional[str] = None
+    forwarded_by_account: Optional[str] = None
+    detected_by_account: Optional[str] = None
+    created_by: Optional[str] = None
 
 class MessageLog(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
