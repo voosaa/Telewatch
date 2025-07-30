@@ -79,9 +79,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (email, password) => {
+  const telegramLogin = async (telegramData) => {
     try {
-      const response = await axios.post(`${API}/auth/login`, { email, password });
+      const response = await axios.post(`${API}/auth/telegram`, telegramData);
       const { access_token, user: userData } = response.data;
       
       setToken(access_token);
@@ -92,39 +92,57 @@ export const AuthProvider = ({ children }) => {
       
       return { success: true };
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error('Telegram login failed:', error);
       return { 
         success: false, 
-        error: error.response?.data?.detail || 'Login failed' 
+        error: error.response?.data?.detail || 'Telegram authentication failed' 
       };
     }
   };
 
-  const register = async (email, password, fullName, organizationName) => {
+  const telegramRegister = async (userData) => {
     try {
-      const response = await axios.post(`${API}/auth/register`, {
-        email,
-        password,
-        full_name: fullName,
-        organization_name: organizationName
-      });
-      
-      const { access_token, user: userData } = response.data;
+      const response = await axios.post(`${API}/auth/register`, userData);
+      const { access_token, user: responseUserData } = response.data;
       
       setToken(access_token);
-      setUser(userData);
+      setUser(responseUserData);
       localStorage.setItem('authToken', access_token);
       
       await fetchOrganization();
       
       return { success: true };
     } catch (error) {
-      console.error('Registration failed:', error);
+      console.error('Telegram registration failed:', error);
       return { 
         success: false, 
         error: error.response?.data?.detail || 'Registration failed' 
       };
     }
+  };
+
+  const login = async (email, password) => {
+    // Legacy method - deprecated for Telegram auth
+    try {
+      const response = await axios.post(`${API}/auth/login`, { email, password });
+      return { 
+        success: false, 
+        error: 'Email/password login has been replaced with Telegram authentication' 
+      };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: 'Email/password login has been replaced with Telegram authentication' 
+      };
+    }
+  };
+
+  const register = async (email, password, fullName, organizationName) => {
+    // Legacy method - deprecated for Telegram auth  
+    return { 
+      success: false, 
+      error: 'Email/password registration has been replaced with Telegram authentication' 
+    };
   };
 
   const logout = () => {
