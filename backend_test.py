@@ -3235,10 +3235,18 @@ class TelegramBotAPITester:
                         self.log_test(f"NOWPayments Create Charge - {test_case['plan'].upper()} {test_case['pay_currency'].upper()}", False, 
                                     f"Expected 'not configured' message but got: {response_data.get('detail')}", response_data)
                 elif response.status_code == 200:
-                    # If real API keys are configured, verify response structure
+                    # If real API keys are configured, verify response structure (FIXED - payment_id field)
                     charge_response = response.json()
                     required_fields = ['payment_url', 'payment_id', 'amount', 'plan', 'pay_currency', 'pay_address', 'pay_amount']
                     missing_fields = [field for field in required_fields if field not in charge_response]
+                    
+                    # Specifically test for payment_id field (the fix)
+                    if 'payment_id' in charge_response:
+                        self.log_test(f"NOWPayments Response Parsing - payment_id field FIXED", True, 
+                                    f"payment_id field correctly present: {charge_response.get('payment_id')}")
+                    else:
+                        self.log_test(f"NOWPayments Response Parsing - payment_id field MISSING", False, 
+                                    "payment_id field missing from response - parsing fix not working")
                     
                     if not missing_fields and charge_response['amount'] == str(test_case['expected_price']):
                         self.log_test(f"NOWPayments Create Charge - {test_case['plan'].upper()} {test_case['pay_currency'].upper()}", True, 
