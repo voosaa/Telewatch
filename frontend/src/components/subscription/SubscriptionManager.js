@@ -505,14 +505,15 @@ const SubscriptionManager = () => {
         <div className="p-6 bg-blue-50 rounded-xl">
           <div className="flex items-center gap-3 mb-4">
             <Bitcoin className="h-6 w-6 text-blue-600" />
-            <h4 className="text-lg font-semibold text-blue-900">Cryptocurrency Payments</h4>
+            <h4 className="text-lg font-semibold text-blue-900">NOWPayments Integration</h4>
           </div>
           <ul className="space-y-2 text-sm text-blue-800">
-            <li>• Instant global payments</li>
-            <li>• No intermediary fees</li>
-            <li>• Secure blockchain technology</li>
-            <li>• Support for 100+ cryptocurrencies</li>
+            <li>• Instant global crypto payments</li>
+            <li>• Low fees (0.5% + network fees)</li>
+            <li>• Non-custodial & secure</li>
+            <li>• Support for {supportedCurrencies.length}+ cryptocurrencies</li>
             <li>• Automatic plan activation</li>
+            <li>• Anonymous payments accepted</li>
           </ul>
         </div>
 
