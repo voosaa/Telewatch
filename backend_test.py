@@ -3201,19 +3201,20 @@ class TelegramBotAPITester:
                 print(f"❌ Error cleaning up forwarding destination {dest_id}: {e}")
 
     def test_nowpayments_create_charge_valid_plans(self):
-        """Test NOWPayments charge creation with valid plans and currencies"""
+        """Test NOWPayments charge creation with valid plans and currencies (FIXED - No USDT)"""
         if not self.auth_token:
             self.log_test("NOWPayments Create Charge - Valid Plans", False, "No authentication token available")
             return
             
         try:
-            # Test Pro plan with different cryptocurrencies
+            # Test Pro plan with different cryptocurrencies (USDT REMOVED per fixes)
             test_cases = [
                 {"plan": "pro", "pay_currency": "btc", "expected_price": 9.99},
                 {"plan": "pro", "pay_currency": "eth", "expected_price": 9.99},
-                {"plan": "pro", "pay_currency": "usdt", "expected_price": 9.99},
+                {"plan": "pro", "pay_currency": "usdc", "expected_price": 9.99},
                 {"plan": "enterprise", "pay_currency": "btc", "expected_price": 19.99},
-                {"plan": "enterprise", "pay_currency": "sol", "expected_price": 19.99}
+                {"plan": "enterprise", "pay_currency": "sol", "expected_price": 19.99},
+                {"plan": "enterprise", "pay_currency": "usdc", "expected_price": 19.99}
             ]
             
             for test_case in test_cases:
