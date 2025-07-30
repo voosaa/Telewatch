@@ -43,36 +43,43 @@ const TelegramRegister = ({ onSwitchToLogin }) => {
 
   // Load Telegram Widget script and initialize
   useEffect(() => {
-    // Make the callback function globally available
+    // Make the callback function globally available with consistent naming
     window.onTelegramAuthRegister = handleTelegramAuth;
+    
+    // Also set up alternative callback name for compatibility  
+    window.telegramRegisterCallback = handleTelegramAuth;
 
-    // Check if script is already loaded
-    if (document.getElementById('telegram-widget-script')) {
-      initializeTelegramWidget();
-      return;
+    // Load Telegram Widget script if not already loaded
+    if (!document.getElementById('telegram-widget-script')) {
+      const script = document.createElement('script');
+      script.id = 'telegram-widget-script';
+      script.src = 'https://telegram.org/js/telegram-widget.js?22';
+      script.async = true;
+      script.onerror = () => {
+        setError('Failed to load Telegram authentication widget. Please refresh and try again.');
+      };
+      
+      document.head.appendChild(script);
     }
 
-    // Load Telegram Widget script
-    const script = document.createElement('script');
-    script.id = 'telegram-widget-script';
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.async = true;
-    script.onload = () => {
-      initializeTelegramWidget();
-    };
-    script.onerror = () => {
-      setError('Failed to load Telegram authentication widget. Please refresh and try again.');
-    };
-    
-    document.head.appendChild(script);
+    // Initialize widget after a short delay to ensure script is loaded
+    const initTimer = setTimeout(() => {
+      if (!showManualForm) {
+        createTelegramWidget();
+      }
+    }, 1000);
 
     return () => {
-      // Clean up global callback
+      // Clean up
+      clearTimeout(initTimer);
       if (window.onTelegramAuthRegister) {
         delete window.onTelegramAuthRegister;
       }
+      if (window.telegramRegisterCallback) {
+        delete window.telegramRegisterCallback;
+      }
     };
-  }, []);
+  }, [showManualForm]);
 
   const initializeTelegramWidget = () => {
     if (widgetRef.current && window.TelegramLoginWidget) {
