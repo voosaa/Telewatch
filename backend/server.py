@@ -310,14 +310,22 @@ class MessageLog(BaseModel):
     group_name: str
     user_id: str
     username: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     user_full_name: Optional[str] = None
     message_text: Optional[str] = None
+    message_date: Optional[datetime] = None
     message_type: str
     media_info: Optional[Dict[str, Any]] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_forwarded: bool = False
     forwarded_count: int = 0  # Number of destinations forwarded to
     matched_keywords: List[str] = []
+    created_by: Optional[str] = None
+    media_type: Optional[str] = None
+    file_path: Optional[str] = None
+    detected_by_account: Optional[str] = None
+    is_edited: bool = False
 
 class BotCommand(BaseModel):
     command: str
