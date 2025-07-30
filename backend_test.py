@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
 Comprehensive Backend API Tests for Telegram Monitoring Bot
-Tests all endpoints and functionality including the new Message Forwarding System.
+Tests all endpoints and functionality including the new Telegram-based Authentication System.
 """
 
 import requests
 import json
 import time
-from datetime import datetime
+import hashlib
+import hmac
+from datetime import datetime, timezone
 from typing import Dict, Any, List
 
 # Load backend URL from frontend .env
