@@ -370,11 +370,17 @@ const SubscriptionManager = () => {
                     </span>
                   </div>
                   <div className="text-xs text-gray-600 space-y-1">
-                    <div>• Bitcoin (BTC)</div>
-                    <div>• Ethereum (ETH)</div>
-                    <div>• USDT & USDC</div>
-                    <div>• Solana (SOL)</div>
-                    <div>• + 100+ more coins</div>
+                    {supportedCurrencies.slice(0, 5).map((currency) => (
+                      <div key={currency.currency}>
+                        • {currency.name} ({currency.currency.toUpperCase()})
+                      </div>
+                    ))}
+                    {supportedCurrencies.length > 5 && (
+                      <div>• + {supportedCurrencies.length - 5} more coins</div>
+                    )}
+                  </div>
+                  <div className="mt-2 text-xs text-blue-600">
+                    ⚡ Powered by NOWPayments
                   </div>
                 </div>
               )}
