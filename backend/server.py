@@ -2597,7 +2597,7 @@ class UserAccountManager:
             
             # Send to destination
             await client.send_message(
-                entity=int(destination['destination_chat_id']),
+                entity=int(destination['destination_id']),
                 message=forward_text
             )
             
@@ -2613,8 +2613,8 @@ class UserAccountManager:
                 message_text=message_data['message_text'],
                 message_type=message_data['media_type'] or 'text',
                 media_info={'media_type': message_data['media_type']} if message_data['media_type'] else None,
-                destination_chat_id=destination['destination_chat_id'],
-                destination_name=destination['name'],
+                destination_chat_id=destination['destination_id'],
+                destination_name=destination['destination_name'],
                 forwarded_at=datetime.now(timezone.utc),
                 tenant_id=destination['tenant_id'],
                 created_by=destination['created_by'],
