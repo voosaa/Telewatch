@@ -4321,7 +4321,6 @@ async def get_supported_currencies():
                 "currencies": [
                     {"currency": "btc", "name": "Bitcoin", "network": "BTC"},
                     {"currency": "eth", "name": "Ethereum", "network": "ETH"},
-                    {"currency": "usdt", "name": "Tether", "network": "ETH"},
                     {"currency": "usdc", "name": "USD Coin", "network": "ETH"},
                     {"currency": "sol", "name": "Solana", "network": "SOL"}
                 ]
