@@ -3012,9 +3012,470 @@ class AccountLoadBalancer:
             logger.error(f"Error getting load summary: {e}")
             return {'error': str(e)}
 
-# Global instances for Phase 2
+# ================== PHASE 3: ENHANCED FEATURES & ANALYTICS ==================
+
+class GroupAutoDiscovery:
+    """Auto-discovery and management of groups from user accounts"""
+    
+    def __init__(self, account_manager: UserAccountManager):
+        self.account_manager = account_manager
+        
+    async def discover_all_groups_for_organization(self, organization_id: str) -> dict:
+        """Discover all groups across all accounts for an organization"""
+        try:
+            # Get all accounts for this organization
+            accounts = await db.accounts.find({
+                "organization_id": organization_id,
+                "status": AccountStatus.ACTIVE.value,
+                "is_active": True
+            }).to_list(100)
+            
+            discovered_groups = {}
+            total_groups = 0
+            
+            for account in accounts:
+                account_id = account['id']
+                if account_id in self.account_manager.active_clients:
+                    client = self.account_manager.active_clients[account_id]
+                    
+                    account_groups = []
+                    async for dialog in client.iter_dialogs():
+                        if dialog.is_group or dialog.is_channel:
+                            group_info = {
+                                'group_id': str(dialog.id),
+                                'name': dialog.name or f"Group {dialog.id}",
+                                'type': 'channel' if dialog.is_channel else 'group',
+                                'participants_count': getattr(dialog.entity, 'participants_count', 0),
+                                'discovered_by': account['name']
+                            }
+                            account_groups.append(group_info)
+                            
+                            # Check if group is already in database
+                            existing = await db.groups.find_one({
+                                "group_id": str(dialog.id),
+                                "tenant_id": organization_id
+                            })
+                            
+                            if not existing:
+                                # Add to database
+                                group = Group(
+                                    group_id=str(dialog.id),
+                                    group_name=dialog.name or f"Group {dialog.id}",
+                                    group_type='channel' if dialog.is_channel else 'group',
+                                    tenant_id=organization_id,
+                                    created_by=account['created_by']
+                                )
+                                await db.groups.insert_one(group.dict())
+                    
+                    discovered_groups[account_id] = account_groups
+                    total_groups += len(account_groups)
+            
+            return {
+                'organization_id': organization_id,
+                'total_accounts': len(accounts),
+                'total_groups_discovered': total_groups,
+                'groups_by_account': discovered_groups
+            }
+            
+        except Exception as e:
+            logger.error(f"Error during group discovery: {e}")
+            return {'error': str(e)}
+
+class AdvancedFiltering:
+    """Advanced filtering system for per-account message processing"""
+    
+    @staticmethod
+    async def create_account_filter(organization_id: str, account_id: str, filter_config: dict):
+        """Create advanced filter for specific account"""
+        try:
+            filter_data = {
+                'id': str(uuid.uuid4()),
+                'organization_id': organization_id,
+                'account_id': account_id,
+                'name': filter_config.get('name', 'Unnamed Filter'),
+                'description': filter_config.get('description', ''),
+                'conditions': filter_config.get('conditions', []),
+                'actions': filter_config.get('actions', []),
+                'is_active': filter_config.get('is_active', True),
+                'created_at': datetime.now(timezone.utc),
+                'updated_at': datetime.now(timezone.utc)
+            }
+            
+            await db.account_filters.insert_one(filter_data)
+            return filter_data
+            
+        except Exception as e:
+            logger.error(f"Error creating account filter: {e}")
+            return None
+    
+    @staticmethod
+    async def apply_account_filters(message_data: dict, account_id: str, organization_id: str) -> dict:
+        """Apply advanced filters to message for specific account"""
+        try:
+            # Get filters for this account
+            filters = await db.account_filters.find({
+                'organization_id': organization_id,
+                'account_id': account_id,
+                'is_active': True
+            }).to_list(100)
+            
+            filter_results = {
+                'should_process': True,
+                'matched_filters': [],
+                'actions_to_perform': [],
+                'filter_scores': {}
+            }
+            
+            for filter_obj in filters:
+                conditions = filter_obj.get('conditions', [])
+                matched = True
+                
+                # Evaluate conditions
+                for condition in conditions:
+                    condition_type = condition.get('type')
+                    condition_value = condition.get('value')
+                    condition_operator = condition.get('operator', 'contains')
+                    
+                    if condition_type == 'message_text':
+                        if condition_operator == 'contains':
+                            matched = matched and (condition_value.lower() in message_data['message_text'].lower())
+                        elif condition_operator == 'equals':
+                            matched = matched and (condition_value.lower() == message_data['message_text'].lower())
+                        elif condition_operator == 'regex':
+                            import re
+                            matched = matched and bool(re.search(condition_value, message_data['message_text'], re.IGNORECASE))
+                    
+                    elif condition_type == 'user_id':
+                        matched = matched and (condition_value == message_data['user_id'])
+                    
+                    elif condition_type == 'username':
+                        matched = matched and (condition_value.lower() == message_data.get('username', '').lower())
+                    
+                    elif condition_type == 'group_id':
+                        matched = matched and (condition_value == message_data['group_id'])
+                    
+                    elif condition_type == 'media_type':
+                        matched = matched and (condition_value == message_data.get('media_type'))
+                    
+                    elif condition_type == 'time_range':
+                        # Time-based filtering
+                        current_hour = datetime.now(timezone.utc).hour
+                        start_hour = condition.get('start_hour', 0)
+                        end_hour = condition.get('end_hour', 23)
+                        matched = matched and (start_hour <= current_hour <= end_hour)
+                
+                if matched:
+                    filter_results['matched_filters'].append(filter_obj['name'])
+                    
+                    # Add actions to perform
+                    actions = filter_obj.get('actions', [])
+                    for action in actions:
+                        if action not in filter_results['actions_to_perform']:
+                            filter_results['actions_to_perform'].append(action)
+                    
+                    # Calculate filter score (for priority)
+                    score = len(conditions) * 10  # Base score
+                    filter_results['filter_scores'][filter_obj['name']] = score
+            
+            return filter_results
+            
+        except Exception as e:
+            logger.error(f"Error applying account filters: {e}")
+            return {'should_process': True, 'matched_filters': [], 'actions_to_perform': []}
+
+class AccountAnalytics:
+    """Analytics and reporting for account performance"""
+    
+    @staticmethod
+    async def get_account_performance_report(organization_id: str, account_id: str = None, days: int = 30) -> dict:
+        """Generate comprehensive account performance report"""
+        try:
+            # Date range
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=days)
+            
+            # Build query
+            base_query = {
+                "tenant_id": organization_id,
+                "created_at": {"$gte": start_date, "$lte": end_date}
+            }
+            
+            if account_id:
+                base_query["detected_by_account"] = account_id
+            
+            # Get message statistics
+            message_stats = await db.message_logs.aggregate([
+                {"$match": base_query},
+                {"$group": {
+                    "_id": "$detected_by_account",
+                    "total_messages": {"$sum": 1},
+                    "unique_groups": {"$addToSet": "$group_id"},
+                    "unique_users": {"$addToSet": "$user_id"},
+                    "media_messages": {"$sum": {"$cond": [{"$ne": ["$media_type", None]}, 1, 0]}},
+                    "edited_messages": {"$sum": {"$cond": ["$is_edited", 1, 0]}}
+                }},
+                {"$project": {
+                    "account_id": "$_id",
+                    "total_messages": 1,
+                    "unique_groups_count": {"$size": "$unique_groups"},
+                    "unique_users_count": {"$size": "$unique_users"},
+                    "media_messages": 1,
+                    "edited_messages": 1,
+                    "text_messages": {"$subtract": ["$total_messages", "$media_messages"]}
+                }}
+            ]).to_list(100)
+            
+            # Get forwarding statistics
+            forwarding_stats = await db.forwarded_messages.aggregate([
+                {"$match": {
+                    "tenant_id": organization_id,
+                    "created_at": {"$gte": start_date, "$lte": end_date}
+                }},
+                {"$group": {
+                    "_id": "$forwarded_by_account",
+                    "total_forwarded": {"$sum": 1},
+                    "unique_destinations": {"$addToSet": "$destination_chat_id"}
+                }},
+                {"$project": {
+                    "account_id": "$_id",
+                    "total_forwarded": 1,
+                    "unique_destinations_count": {"$size": "$unique_destinations"}
+                }}
+            ]).to_list(100)
+            
+            # Combine statistics
+            account_reports = {}
+            
+            # Add message stats
+            for stat in message_stats:
+                account_id = stat['account_id']
+                account_reports[account_id] = stat
+                
+            # Add forwarding stats
+            for stat in forwarding_stats:
+                account_id = stat['account_id']
+                if account_id in account_reports:
+                    account_reports[account_id].update(stat)
+                else:
+                    account_reports[account_id] = stat
+            
+            # Get account health data
+            for account_id in account_reports.keys():
+                account_doc = await db.accounts.find_one({"id": account_id})
+                if account_doc:
+                    account_reports[account_id].update({
+                        'account_name': account_doc['name'],
+                        'status': account_doc.get('status', 'unknown'),
+                        'health_status': account_doc.get('health_status', 'unknown'),
+                        'last_activity': account_doc.get('last_activity'),
+                        'response_time': account_doc.get('response_time'),
+                        'groups_accessible': account_doc.get('groups_accessible', 0)
+                    })
+            
+            return {
+                'organization_id': organization_id,
+                'report_period': f"{days} days",
+                'start_date': start_date,
+                'end_date': end_date,
+                'account_reports': account_reports,
+                'summary': {
+                    'total_accounts': len(account_reports),
+                    'total_messages_detected': sum(report.get('total_messages', 0) for report in account_reports.values()),
+                    'total_messages_forwarded': sum(report.get('total_forwarded', 0) for report in account_reports.values()),
+                    'total_unique_groups': len(set().union(*[report.get('unique_groups', []) for report in message_stats])),
+                    'total_unique_users': len(set().union(*[report.get('unique_users', []) for report in message_stats]))
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating performance report: {e}")
+            return {'error': str(e)}
+    
+    @staticmethod
+    async def get_organization_dashboard_stats(organization_id: str) -> dict:
+        """Get real-time dashboard statistics for organization"""
+        try:
+            # Get current date ranges
+            now = datetime.now(timezone.utc)
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            week_start = today_start - timedelta(days=7)
+            month_start = today_start - timedelta(days=30)
+            
+            # Parallel queries for performance
+            queries = await asyncio.gather(
+                # Today's messages
+                db.message_logs.count_documents({
+                    "tenant_id": organization_id,
+                    "created_at": {"$gte": today_start}
+                }),
+                # This week's messages
+                db.message_logs.count_documents({
+                    "tenant_id": organization_id,
+                    "created_at": {"$gte": week_start}
+                }),
+                # This month's messages
+                db.message_logs.count_documents({
+                    "tenant_id": organization_id,
+                    "created_at": {"$gte": month_start}
+                }),
+                # Active accounts
+                db.accounts.count_documents({
+                    "organization_id": organization_id,
+                    "status": AccountStatus.ACTIVE.value,
+                    "is_active": True
+                }),
+                # Total groups being monitored
+                db.groups.count_documents({
+                    "tenant_id": organization_id,
+                    "is_active": True
+                }),
+                # Today's forwarded messages
+                db.forwarded_messages.count_documents({
+                    "tenant_id": organization_id,
+                    "created_at": {"$gte": today_start}
+                })
+            )
+            
+            return {
+                'organization_id': organization_id,
+                'timestamp': now,
+                'messages_today': queries[0],
+                'messages_this_week': queries[1],
+                'messages_this_month': queries[2],
+                'active_accounts': queries[3],
+                'monitored_groups': queries[4],
+                'forwarded_today': queries[5],
+                'forwarding_rate': (queries[5] / queries[0] * 100) if queries[0] > 0 else 0
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting dashboard stats: {e}")
+            return {'error': str(e)}
+
+# Global instances for Phase 2 (maintained for compatibility)
 health_monitor = AccountHealthMonitor(account_manager)
 load_balancer = AccountLoadBalancer(account_manager)
+
+# Global instances for Phase 3
+group_discovery = GroupAutoDiscovery(account_manager)
+analytics = AccountAnalytics()
+
+# ================== ENHANCED API ENDPOINTS FOR ANALYTICS ==================
+
+@api_router.get("/analytics/dashboard")
+async def get_dashboard_analytics(current_user: Dict = Depends(get_current_active_user)):
+    """Get real-time dashboard analytics for organization"""
+    try:
+        stats = await analytics.get_organization_dashboard_stats(current_user["organization_id"])
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting dashboard analytics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get analytics: {str(e)}")
+
+@api_router.get("/analytics/accounts")
+async def get_account_analytics(
+    days: int = 30,
+    account_id: Optional[str] = None,
+    current_user: Dict = Depends(get_current_active_user)
+):
+    """Get detailed account performance analytics"""
+    try:
+        report = await analytics.get_account_performance_report(
+            current_user["organization_id"],
+            account_id,
+            days
+        )
+        return report
+    except Exception as e:
+        logger.error(f"Error getting account analytics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get account analytics: {str(e)}")
+
+@api_router.get("/accounts/health")
+async def get_accounts_health_summary(current_user: Dict = Depends(get_current_active_user)):
+    """Get health summary of all accounts"""
+    try:
+        summary = health_monitor.get_health_summary()
+        load_summary = load_balancer.get_load_summary()
+        
+        return {
+            'health': summary,
+            'load_balancing': load_summary,
+            'organization_id': current_user["organization_id"]
+        }
+    except Exception as e:
+        logger.error(f"Error getting health summary: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get health summary: {str(e)}")
+
+@api_router.post("/groups/discover")
+async def discover_groups(current_user: Dict = Depends(require_admin)):
+    """Discover groups from all active accounts (Admin/Owner only)"""
+    try:
+        discovery_result = await group_discovery.discover_all_groups_for_organization(
+            current_user["organization_id"]
+        )
+        return discovery_result
+    except Exception as e:
+        logger.error(f"Error during group discovery: {e}")
+        raise HTTPException(status_code=500, detail=f"Group discovery failed: {str(e)}")
+
+@api_router.post("/accounts/{account_id}/filters")
+async def create_account_filter(
+    account_id: str,
+    filter_config: Dict[str, Any],
+    current_user: Dict = Depends(require_admin)
+):
+    """Create advanced filter for specific account (Admin/Owner only)"""
+    try:
+        # Verify account belongs to user's organization
+        account = await db.accounts.find_one({
+            "id": account_id,
+            "organization_id": current_user["organization_id"]
+        })
+        
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        
+        filter_obj = await AdvancedFiltering.create_account_filter(
+            current_user["organization_id"],
+            account_id,
+            filter_config
+        )
+        
+        if filter_obj:
+            return filter_obj
+        else:
+            raise HTTPException(status_code=500, detail="Failed to create filter")
+        
+    except Exception as e:
+        logger.error(f"Error creating account filter: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create account filter: {str(e)}")
+
+@api_router.get("/accounts/{account_id}/filters")
+async def get_account_filters(
+    account_id: str,
+    current_user: Dict = Depends(get_current_active_user)
+):
+    """Get all filters for specific account"""
+    try:
+        # Verify account belongs to user's organization
+        account = await db.accounts.find_one({
+            "id": account_id,
+            "organization_id": current_user["organization_id"]
+        })
+        
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        
+        filters = await db.account_filters.find({
+            'organization_id': current_user["organization_id"],
+            'account_id': account_id
+        }).to_list(100)
+        
+        return filters
+        
+    except Exception as e:
+        logger.error(f"Error getting account filters: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get account filters: {str(e)}")
 
 async def initialize_active_accounts():
     """Initialize all active accounts on startup"""
