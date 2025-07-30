@@ -2593,7 +2593,7 @@ class UserAccountManager:
             forward_text += message_data['message_text'] or "*No text content*"
             
             # Add rate limiting check
-            rate_limit_key = f"forward_{destination['destination_chat_id']}_{datetime.now().strftime('%Y%m%d%H%M')}"
+            rate_limit_key = f"forward_{destination['destination_id']}_{datetime.now().strftime('%Y%m%d%H%M')}"
             
             # Send to destination
             await client.send_message(
