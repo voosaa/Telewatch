@@ -136,14 +136,17 @@ const SubscriptionManager = () => {
     }
   };
 
-  const handleCryptoUpgrade = async (planType) => {
+  const handleCryptoUpgrade = async (planType, selectedCurrency = 'btc') => {
     setPaymentLoading(planType);
     setError('');
 
     try {
       const response = await axios.post(
         `${process.env.REACT_APP_BACKEND_URL}/api/crypto/create-charge`,
-        { plan: planType },
+        { 
+          plan: planType,
+          pay_currency: selectedCurrency 
+        },
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`
@@ -151,12 +154,18 @@ const SubscriptionManager = () => {
         }
       );
 
-      // Redirect to Coinbase Commerce payment page
-      window.location.href = response.data.hosted_url;
+      // Redirect to NOWPayments payment page
+      window.location.href = response.data.payment_url;
       
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create payment. Please try again.');
       setPaymentLoading('');
+    }
+  };
+
+  const handleCurrencySelect = (planType, currency) => {
+    if (window.confirm(`Pay $${plans[planType].price} for ${plans[planType].name} plan using ${currency.name} (${currency.currency.toUpperCase()})?`)) {
+      handleCryptoUpgrade(planType, currency.currency);
     }
   };
 
