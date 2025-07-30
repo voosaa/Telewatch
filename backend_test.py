@@ -3300,9 +3300,19 @@ class TelegramBotAPITester:
                 if response.status_code == 400:
                     self.log_test(f"NOWPayments Validation - Invalid Currency '{invalid_currency}'", True, 
                                 f"Correctly rejected invalid currency with HTTP 400")
+                    
+                    # Special check for USDT rejection (the fix)
+                    if invalid_currency == "usdt":
+                        self.log_test("NOWPayments USDT Rejection - FIXED", True, 
+                                    "USDT correctly rejected as invalid currency (removed per fixes)")
                 else:
                     self.log_test(f"NOWPayments Validation - Invalid Currency '{invalid_currency}'", False, 
                                 f"Expected HTTP 400 but got {response.status_code}")
+                    
+                    # Special check for USDT - should be rejected
+                    if invalid_currency == "usdt":
+                        self.log_test("NOWPayments USDT Rejection - NOT FIXED", False, 
+                                    f"USDT should be rejected but got HTTP {response.status_code} - fix not working")
                 
         except Exception as e:
             self.log_test("NOWPayments Create Charge - Validation", False, f"Error: {str(e)}")
