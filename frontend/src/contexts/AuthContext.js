@@ -179,6 +179,8 @@ export const AuthProvider = ({ children }) => {
     token,
     login,
     register,
+    telegramLogin,
+    telegramRegister,
     logout,
     updateUser,
     updateOrganization,
