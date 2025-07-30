@@ -27,7 +27,14 @@ import {
   CreditCard,
   Crown,
   Check,
-  X
+  X,
+  Upload,
+  Download,
+  Play,
+  Pause,
+  AlertCircle,
+  Phone,
+  FileText
 } from "lucide-react";
 import "./App.css";
 
