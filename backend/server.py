@@ -4021,7 +4021,7 @@ async def get_account_status(
 
 class CryptoChargeRequest(BaseModel):
     plan: str  # "pro" or "enterprise"
-    pay_currency: str = "btc"  # Default to BTC, can be btc, eth, usdt, usdc, sol
+    pay_currency: str = "btc"  # Default to BTC, can be btc, eth, usdc, sol
 
 class CryptoChargeResponse(BaseModel):
     payment_url: str
