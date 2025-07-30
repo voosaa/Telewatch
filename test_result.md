@@ -129,6 +129,17 @@ user_problem_statement: "Create entire Telegram bot monitoring system from bot_p
         comment: "✅ TESTED: Subscription Management System testing complete with 100% success rate (18/18 tests passed). Key findings: (1) ✅ Organization Plan Management - GET/PUT /api/organizations/current endpoints working perfectly with proper plan field support, (2) ✅ Plan Validation - Correctly validates and accepts free/pro/enterprise plans while rejecting invalid values, (3) ✅ Authentication & Authorization - Requires proper JWT authentication and admin/owner permissions for plan modifications, (4) ✅ Data Integrity - Plan updates are properly saved and reflected in organization data, (5) ✅ Backend Support - Fully supports the frontend subscription management page. The subscription management backend is production-ready."
 
 backend:
+  - task: "Telegram Bot Command Responsiveness - Bot Not Responding to /start"
+    implemented: true
+    working: false
+    file: "server.py"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "❌ USER REPORTED ISSUE: Telegram bot /start command does nothing when used on Telegram. The bot is not responding to commands despite previous testing showing bot functionality was working. This is a critical issue as users cannot interact with the bot."
   - task: "Account Management System - Multi-Account Session Upload"
     implemented: true
     working: true
