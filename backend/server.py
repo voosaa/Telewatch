@@ -155,6 +155,50 @@ class UserInvite(BaseModel):
     role: UserRole
     full_name: str
 
+class AccountStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    ERROR = "error"
+
+class Account(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    organization_id: str
+    created_by: str
+    name: str  # Display name for the account
+    phone_number: Optional[str] = None  # Phone number from JSON
+    username: Optional[str] = None  # Username from JSON
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    status: AccountStatus = AccountStatus.INACTIVE
+    is_active: bool = True
+    session_file_path: str  # Path to the session file
+    json_file_path: str    # Path to the JSON file
+    last_activity: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    error_message: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)  # Store JSON file contents
+
+class AccountCreate(BaseModel):
+    name: str
+    session_file: bytes
+    json_file: bytes
+    session_filename: str
+    json_filename: str
+
+class AccountResponse(BaseModel):
+    id: str
+    name: str
+    phone_number: Optional[str] = None
+    username: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    status: AccountStatus
+    is_active: bool
+    last_activity: Optional[datetime] = None
+    created_at: datetime
+    error_message: Optional[str] = None
+
 # ================== PYDANTIC MODELS (Updated with tenant_id) ==================
 
 class GroupCreate(BaseModel):
