@@ -3340,6 +3340,432 @@ class AccountAnalytics:
 health_monitor = AccountHealthMonitor(account_manager)
 load_balancer = AccountLoadBalancer(account_manager)
 
+# ================== TELEGRAM BOT COMMAND HANDLERS ==================
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /start command"""
+    try:
+        user = update.effective_user
+        logger.info(f"Start command from user: {user.id} (@{user.username})")
+        
+        # Check if user is registered in our system
+        user_doc = await db.users.find_one({"telegram_id": user.id})
+        
+        if user_doc:
+            # User exists, show main menu
+            keyboard = [
+                [InlineKeyboardButton("📊 Dashboard", callback_data="dashboard")],
+                [InlineKeyboardButton("👥 Accounts", callback_data="accounts"),
+                 InlineKeyboardButton("🔍 Groups", callback_data="groups")],
+                [InlineKeyboardButton("👁️ Watchlist", callback_data="watchlist"),
+                 InlineKeyboardButton("📤 Forwarding", callback_data="forwarding")],
+                [InlineKeyboardButton("📈 Analytics", callback_data="analytics"),
+                 InlineKeyboardButton("⚙️ Settings", callback_data="settings")],
+                [InlineKeyboardButton("❓ Help", callback_data="help")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            welcome_msg = f"👋 Welcome back, {user.first_name}!\n\n"
+            welcome_msg += "🤖 **Telegram Monitor Bot**\n"
+            welcome_msg += "Multi-Account Session Monitoring System\n\n"
+            welcome_msg += "Choose an option below:"
+            
+            await update.message.reply_text(welcome_msg, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            # User not registered, show registration info
+            welcome_msg = "👋 Welcome to **Telegram Monitor Bot**!\n\n"
+            welcome_msg += "🚀 This is a multi-account session-based monitoring system.\n\n"
+            welcome_msg += "To get started:\n"
+            welcome_msg += "1. Visit our web dashboard to register\n"
+            welcome_msg += "2. Create your organization account\n"
+            welcome_msg += "3. Upload your Telegram account sessions\n\n"
+            welcome_msg += "🌐 **Web Dashboard:** Access via Telegram Login Widget\n"
+            welcome_msg += "📱 **Bot Commands:** Use /help for available commands"
+            
+            keyboard = [
+                [InlineKeyboardButton("🌐 Web Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("❓ Help", callback_data="help")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(welcome_msg, reply_markup=reply_markup, parse_mode='Markdown')
+            
+    except Exception as e:
+        logger.error(f"Error in start command: {e}")
+        await update.message.reply_text("❌ An error occurred. Please try again later.")
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /help command"""
+    try:
+        help_msg = "❓ **Help - Telegram Monitor Bot**\n\n"
+        help_msg += "**Available Commands:**\n"
+        help_msg += "• /start - Main menu\n"
+        help_msg += "• /status - System status\n"
+        help_msg += "• /accounts - Account management\n"
+        help_msg += "• /groups - Group management\n"
+        help_msg += "• /analytics - View analytics\n"
+        help_msg += "• /help - Show this help\n\n"
+        help_msg += "**Features:**\n"
+        help_msg += "🔹 Multi-account monitoring\n"
+        help_msg += "🔹 Stealth group monitoring\n"
+        help_msg += "🔹 Advanced message filtering\n"
+        help_msg += "🔹 Real-time forwarding\n"
+        help_msg += "🔹 Comprehensive analytics\n\n"
+        help_msg += "**Web Dashboard:**\n"
+        help_msg += "For full features, use our web interface with Telegram authentication."
+        
+        keyboard = [
+            [InlineKeyboardButton("🌐 Open Web Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+            [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(help_msg, reply_markup=reply_markup, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Error in help command: {e}")
+        await update.message.reply_text("❌ An error occurred. Please try again later.")
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /status command"""
+    try:
+        user = update.effective_user
+        
+        # Check if user is registered
+        user_doc = await db.users.find_one({"telegram_id": user.id})
+        
+        if not user_doc:
+            await update.message.reply_text("❌ You need to register first. Use /start to get started.")
+            return
+        
+        # Get organization stats
+        org_id = user_doc["organization_id"]
+        
+        # Get system health
+        health_summary = health_monitor.get_health_summary()
+        
+        # Get dashboard stats
+        dashboard_stats = await analytics.get_organization_dashboard_stats(org_id)
+        
+        status_msg = "📊 **System Status**\n\n"
+        
+        # Account health
+        if 'error' not in health_summary:
+            status_msg += f"🤖 **Accounts:** {health_summary['healthy_accounts']}/{health_summary['total_accounts']} healthy "
+            status_msg += f"({health_summary['health_percentage']:.1f}%)\n"
+        else:
+            status_msg += "🤖 **Accounts:** Status unavailable\n"
+        
+        # Today's activity  
+        if 'error' not in dashboard_stats:
+            status_msg += f"📨 **Today's Messages:** {dashboard_stats['messages_today']}\n"
+            status_msg += f"📤 **Forwarded Today:** {dashboard_stats['forwarded_today']}\n"
+            status_msg += f"👥 **Active Accounts:** {dashboard_stats['active_accounts']}\n"
+            status_msg += f"🔍 **Monitored Groups:** {dashboard_stats['monitored_groups']}\n"
+        else:
+            status_msg += "📊 **Activity Stats:** Unavailable\n"
+        
+        status_msg += f"\n⏰ **Last Updated:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC"
+        
+        keyboard = [
+            [InlineKeyboardButton("📊 Detailed Analytics", callback_data="analytics")],
+            [InlineKeyboardButton("👥 Account Status", callback_data="accounts")],
+            [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(status_msg, reply_markup=reply_markup, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Error in status command: {e}")
+        await update.message.reply_text("❌ An error occurred while fetching status.")
+
+async def accounts_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /accounts command"""
+    try:
+        user = update.effective_user
+        
+        # Check if user is registered
+        user_doc = await db.users.find_one({"telegram_id": user.id})
+        
+        if not user_doc:
+            await update.message.reply_text("❌ You need to register first. Use /start to get started.")
+            return
+        
+        # Get accounts for user's organization
+        accounts = await db.accounts.find({
+            "organization_id": user_doc["organization_id"],
+            "is_active": True
+        }).to_list(10)
+        
+        if not accounts:
+            msg = "👥 **Account Management**\n\n"
+            msg += "❌ No accounts configured yet.\n\n"
+            msg += "To add accounts:\n"
+            msg += "1. Go to the web dashboard\n"
+            msg += "2. Upload session + JSON files\n"
+            msg += "3. Activate accounts for monitoring"
+            
+            keyboard = [
+                [InlineKeyboardButton("🌐 Web Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+        else:
+            msg = f"👥 **Account Management** ({len(accounts)} accounts)\n\n"
+            
+            for i, account in enumerate(accounts[:5]):  # Show max 5 accounts
+                status_emoji = "✅" if account["status"] == "active" else "⏸️" if account["status"] == "inactive" else "❌"
+                msg += f"{status_emoji} **{account['name']}**\n"
+                msg += f"   Status: {account['status'].title()}\n"
+                if account.get('username'):
+                    msg += f"   @{account['username']}\n"
+                if account.get('last_activity'):
+                    msg += f"   Last Active: {account['last_activity'].strftime('%H:%M %d/%m')}\n"
+                msg += "\n"
+            
+            if len(accounts) > 5:
+                msg += f"... and {len(accounts) - 5} more accounts\n\n"
+            
+            msg += "Use web dashboard for full account management."
+            
+            keyboard = [
+                [InlineKeyboardButton("🌐 Manage Accounts", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🔄 Refresh", callback_data="accounts"),
+                 InlineKeyboardButton("🏠 Menu", callback_data="main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(msg, reply_markup=reply_markup, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Error in accounts command: {e}")
+        await update.message.reply_text("❌ An error occurred while fetching accounts.")
+
+async def groups_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /groups command"""
+    try:
+        user = update.effective_user
+        
+        # Check if user is registered
+        user_doc = await db.users.find_one({"telegram_id": user.id})
+        
+        if not user_doc:
+            await update.message.reply_text("❌ You need to register first. Use /start to get started.")
+            return
+        
+        # Get groups for user's organization
+        groups = await db.groups.find({
+            "tenant_id": user_doc["organization_id"],
+            "is_active": True
+        }).to_list(10)
+        
+        if not groups:
+            msg = "🔍 **Group Management**\n\n"
+            msg += "❌ No groups found.\n\n"
+            msg += "Groups are automatically discovered when you:\n"
+            msg += "1. Upload account sessions\n"
+            msg += "2. Activate accounts\n"
+            msg += "3. Use group discovery feature"
+        else:
+            msg = f"🔍 **Monitored Groups** ({len(groups)} groups)\n\n"
+            
+            for i, group in enumerate(groups[:5]):  # Show max 5 groups
+                monitoring_emoji = "👁️" if group.get("monitoring_enabled", True) else "⏸️"
+                msg += f"{monitoring_emoji} **{group['name']}**\n"
+                msg += f"   ID: `{group['group_id']}`\n"
+                if group.get('auto_discovered'):
+                    msg += "   🤖 Auto-discovered\n"
+                msg += "\n"
+            
+            if len(groups) > 5:
+                msg += f"... and {len(groups) - 5} more groups\n\n"
+        
+        keyboard = [
+            [InlineKeyboardButton("🌐 Manage Groups", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+            [InlineKeyboardButton("🔍 Discover Groups", callback_data="discover_groups")],
+            [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(msg, reply_markup=reply_markup, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Error in groups command: {e}")
+        await update.message.reply_text("❌ An error occurred while fetching groups.")
+
+async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /analytics command"""
+    try:
+        user = update.effective_user
+        
+        # Check if user is registered
+        user_doc = await db.users.find_one({"telegram_id": user.id})
+        
+        if not user_doc:
+            await update.message.reply_text("❌ You need to register first. Use /start to get started.")
+            return
+        
+        # Get analytics data
+        org_id = user_doc["organization_id"]
+        dashboard_stats = await analytics.get_organization_dashboard_stats(org_id)
+        
+        if 'error' in dashboard_stats:
+            msg = "📈 **Analytics**\n\n❌ Unable to load analytics data."
+        else:
+            msg = "📈 **Analytics Overview**\n\n"
+            msg += f"📊 **Today:** {dashboard_stats['messages_today']} messages\n"
+            msg += f"📅 **This Week:** {dashboard_stats['messages_this_week']} messages\n"
+            msg += f"📆 **This Month:** {dashboard_stats['messages_this_month']} messages\n\n"
+            msg += f"📤 **Forwarded Today:** {dashboard_stats['forwarded_today']}\n"
+            msg += f"📊 **Forward Rate:** {dashboard_stats['forwarding_rate']:.1f}%\n\n"
+            msg += f"🤖 **Active Accounts:** {dashboard_stats['active_accounts']}\n"
+            msg += f"👥 **Monitored Groups:** {dashboard_stats['monitored_groups']}\n"
+        
+        keyboard = [
+            [InlineKeyboardButton("🌐 Detailed Analytics", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+            [InlineKeyboardButton("🔄 Refresh", callback_data="analytics"),
+             InlineKeyboardButton("🏠 Menu", callback_data="main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(msg, reply_markup=reply_markup, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Error in analytics command: {e}")
+        await update.message.reply_text("❌ An error occurred while fetching analytics.")
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle button callbacks"""
+    try:
+        query = update.callback_query
+        await query.answer()
+        
+        user = query.from_user
+        callback_data = query.data
+        
+        logger.info(f"Button callback: {callback_data} from user {user.id}")
+        
+        if callback_data == "main_menu":
+            # Return to main menu
+            await start_command(update, context)
+            return
+        elif callback_data == "help":
+            await help_command(update, context)
+            return
+        elif callback_data == "dashboard":
+            msg = "📊 **Dashboard**\n\nFor the complete dashboard with real-time data, charts, and detailed analytics, please use the web interface."
+            keyboard = [
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(msg, reply_markup=reply_markup, parse_mode='Markdown')
+        elif callback_data == "accounts":
+            await accounts_command(update, context)
+            return
+        elif callback_data == "groups":
+            await groups_command(update, context)
+            return
+        elif callback_data == "analytics":
+            await analytics_command(update, context)
+            return
+        elif callback_data == "discover_groups":
+            # Trigger group discovery
+            user_doc = await db.users.find_one({"telegram_id": user.id})
+            if user_doc:
+                try:
+                    discovery_result = await group_discovery.discover_all_groups_for_organization(
+                        user_doc["organization_id"]
+                    )
+                    
+                    if 'error' in discovery_result:
+                        msg = "❌ Group discovery failed. Please try again later."
+                    else:
+                        total_groups = discovery_result.get('total_groups_discovered', 0)
+                        msg = f"🔍 **Group Discovery Complete**\n\n"
+                        msg += f"Found {total_groups} groups across your accounts.\n"
+                        msg += "Check the web dashboard for details."
+                    
+                except Exception as e:
+                    logger.error(f"Group discovery error: {e}")
+                    msg = "❌ Group discovery failed. Please try again later."
+            else:
+                msg = "❌ User not found. Please use /start first."
+            
+            keyboard = [
+                [InlineKeyboardButton("🌐 View Groups", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(msg, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            # Handle other callbacks
+            msg = f"🔧 **{callback_data.title()}**\n\nThis feature requires the web dashboard for full functionality."
+            keyboard = [
+                [InlineKeyboardButton("🌐 Open Web Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(msg, reply_markup=reply_markup, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Error in button callback: {e}")
+        try:
+            await update.callback_query.edit_message_text("❌ An error occurred. Please try again.")
+        except:
+            pass
+
+# ================== TELEGRAM BOT APPLICATION SETUP ==================
+
+# Bot application instance
+bot_application = None
+
+async def setup_bot_handlers():
+    """Setup bot command handlers"""
+    try:
+        global bot_application
+        
+        # Create application
+        bot_application = Application.builder().token(os.environ.get('TELEGRAM_TOKEN')).build()
+        
+        # Add command handlers
+        bot_application.add_handler(CommandHandler("start", start_command))
+        bot_application.add_handler(CommandHandler("help", help_command))
+        bot_application.add_handler(CommandHandler("status", status_command))
+        bot_application.add_handler(CommandHandler("accounts", accounts_command))
+        bot_application.add_handler(CommandHandler("groups", groups_command))
+        bot_application.add_handler(CommandHandler("analytics", analytics_command))
+        
+        # Add callback query handler
+        bot_application.add_handler(CallbackQueryHandler(button_callback))
+        
+        # Initialize the application
+        await bot_application.initialize()
+        await bot_application.start()
+        
+        logger.info("✅ Telegram bot handlers setup complete")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to setup bot handlers: {e}")
+        return False
+
+async def cleanup_bot_handlers():
+    """Cleanup bot handlers on shutdown"""
+    try:
+        global bot_application
+        if bot_application:
+            await bot_application.stop()
+            await bot_application.shutdown()
+            logger.info("✅ Telegram bot handlers cleaned up")
+    except Exception as e:
+        logger.error(f"Error cleaning up bot handlers: {e}")
+
 # Global instances for Phase 3
 group_discovery = GroupAutoDiscovery(account_manager)
 analytics = AccountAnalytics()
