@@ -19,6 +19,8 @@ import json
 import re
 import jwt
 import bcrypt
+import hashlib
+import hmac
 from enum import Enum
 
 ROOT_DIR = Path(__file__).parent
