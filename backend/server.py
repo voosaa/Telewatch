@@ -2131,8 +2131,7 @@ async def test_bot():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Bot connection failed: {str(e)}")
 
-# Include the router in the main app
-app.include_router(api_router)
+# Include the router in the main app - moved to end after all routes are defined
 
 app.add_middleware(
     CORSMiddleware,
