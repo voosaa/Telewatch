@@ -2341,16 +2341,30 @@ class TelegramBotAPITester:
 if __name__ == "__main__":
     tester = TelegramBotAPITester()
     try:
+        # Test basic connectivity
+        tester.test_root_endpoint()
+        tester.test_bot_connection()
+        
         # Run Account Management System Tests
         account_management_summary = tester.run_account_management_tests()
         
+        # Run Multi-Account Session-Based Monitoring System Tests
+        monitoring_summary = tester.run_multi_account_session_monitoring_tests()
+        
         # Print overall summary
         print("\n🎯 OVERALL TEST EXECUTION SUMMARY")
-        print("=" * 60)
+        print("=" * 80)
         print(f"Account Management System Tests: {account_management_summary['passed']}/{account_management_summary['total']} passed ({account_management_summary['success_rate']:.1f}%)")
+        print(f"Multi-Account Session Monitoring Tests: {monitoring_summary['passed']}/{monitoring_summary['total']} passed ({monitoring_summary['success_rate']:.1f}%)")
+        
+        total_all = account_management_summary['total'] + monitoring_summary['total']
+        passed_all = account_management_summary['passed'] + monitoring_summary['passed']
+        overall_success_rate = (passed_all/total_all)*100 if total_all > 0 else 0
+        
+        print(f"\n🎯 OVERALL SUCCESS RATE: {passed_all}/{total_all} ({overall_success_rate:.1f}%)")
         
         # Exit with appropriate code
-        exit(0 if account_management_summary['failed'] == 0 else 1)
+        exit(0 if (account_management_summary['failed'] + monitoring_summary['failed']) == 0 else 1)
     except Exception as e:
         print(f"❌ Test execution failed: {e}")
         exit(1)
