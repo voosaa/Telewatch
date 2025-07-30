@@ -4125,7 +4125,7 @@ async def create_crypto_charge(
         # Store pending charge in database
         pending_charge = {
             "id": str(uuid.uuid4()),
-            "payment_id": payment_response.get("payment_id"),
+            "payment_id": payment_response.get("payment_id"),  # Fixed: NOWPayments uses payment_id
             "order_id": order_id,
             "user_id": current_user["id"],
             "organization_id": current_user["organization_id"],
