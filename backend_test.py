@@ -3300,7 +3300,7 @@ class TelegramBotAPITester:
             self.log_test("NOWPayments Create Charge - Validation", False, f"Error: {str(e)}")
 
     def test_nowpayments_currencies_endpoint(self):
-        """Test GET /api/crypto/currencies - Supported cryptocurrency list"""
+        """Test GET /api/crypto/currencies - Supported cryptocurrency list (FIXED - No USDT)"""
         try:
             response = self.session.get(f"{API_BASE}/crypto/currencies")
             
@@ -3310,18 +3310,22 @@ class TelegramBotAPITester:
                 if "currencies" in currencies_data:
                     currencies = currencies_data["currencies"]
                     
-                    # Verify expected cryptocurrencies are present
-                    expected_currencies = ["btc", "eth", "usdt", "usdc", "sol"]
+                    # Verify expected cryptocurrencies are present (USDT REMOVED per fixes)
+                    expected_currencies = ["btc", "eth", "usdc", "sol"]  # USDT removed
                     found_currencies = [curr["currency"] for curr in currencies if "currency" in curr]
                     
                     missing_currencies = [curr for curr in expected_currencies if curr not in found_currencies]
+                    unexpected_currencies = [curr for curr in found_currencies if curr not in expected_currencies]
                     
-                    if not missing_currencies:
-                        self.log_test("NOWPayments Currencies Endpoint", True, 
-                                    f"All expected currencies present: {found_currencies}", currencies_data)
+                    if not missing_currencies and not unexpected_currencies:
+                        self.log_test("NOWPayments Currencies Endpoint - FIXED", True, 
+                                    f"Correct currencies present (USDT removed): {found_currencies}", currencies_data)
+                    elif not missing_currencies and "usdt" in unexpected_currencies:
+                        self.log_test("NOWPayments Currencies Endpoint - USDT Still Present", False, 
+                                    f"USDT should be removed but still found: {found_currencies}", currencies_data)
                     else:
-                        self.log_test("NOWPayments Currencies Endpoint", False, 
-                                    f"Missing currencies: {missing_currencies}", currencies_data)
+                        self.log_test("NOWPayments Currencies Endpoint - FIXED", False, 
+                                    f"Missing: {missing_currencies}, Unexpected: {unexpected_currencies}", currencies_data)
                     
                     # Verify currency structure
                     if currencies:
