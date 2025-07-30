@@ -2605,6 +2605,14 @@ class UserAccountManager:
             forwarded_log = ForwardedMessage(
                 original_message_id=message_data['message_id'],
                 source_group_id=message_data['group_id'],
+                from_group_id=message_data['group_id'],  # For backward compatibility
+                from_group_name=message_data['group_name'],
+                from_user_id=message_data['user_id'],
+                from_username=message_data['username'],
+                from_user_full_name=f"{message_data['first_name']} {message_data['last_name']}".strip(),
+                message_text=message_data['message_text'],
+                message_type=message_data['media_type'] or 'text',
+                media_info={'media_type': message_data['media_type']} if message_data['media_type'] else None,
                 destination_chat_id=destination['destination_chat_id'],
                 destination_name=destination['name'],
                 forwarded_at=datetime.now(timezone.utc),
