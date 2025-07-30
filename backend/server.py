@@ -4017,6 +4017,243 @@ async def get_account_status(
         logger.error(f"Error getting account status: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get account status: {str(e)}")
 
+# ================== CRYPTOCURRENCY PAYMENT SYSTEM (COINBASE COMMERCE) ==================
+
+class CryptoChargeRequest(BaseModel):
+    plan: str  # "pro" or "enterprise"
+
+class CryptoChargeResponse(BaseModel):
+    hosted_url: str
+    charge_id: str
+    amount: str
+    plan: str
+
+@api_router.post("/crypto/create-charge", response_model=CryptoChargeResponse)
+async def create_crypto_charge(
+    charge_request: CryptoChargeRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create cryptocurrency payment charge via Coinbase Commerce"""
+    try:
+        # Validate plan
+        if charge_request.plan not in ["pro", "enterprise"]:
+            raise HTTPException(status_code=400, detail="Invalid plan. Must be 'pro' or 'enterprise'")
+        
+        # Get plan pricing
+        subscription_plans = json.loads(os.environ.get('SUBSCRIPTION_PLANS', '{"pro": 9.99, "enterprise": 19.99}'))
+        plan_price = subscription_plans.get(charge_request.plan)
+        
+        if not plan_price:
+            raise HTTPException(status_code=400, detail="Plan pricing not configured")
+        
+        # Check if user already has this plan or higher
+        user_org = await db.organizations.find_one({"id": current_user["organization_id"]})
+        current_plan = user_org.get("plan", "free")
+        
+        # Prevent downgrade
+        plan_hierarchy = {"free": 0, "pro": 1, "enterprise": 2}
+        if plan_hierarchy.get(current_plan, 0) >= plan_hierarchy.get(charge_request.plan, 0):
+            raise HTTPException(status_code=400, detail=f"You already have {current_plan} plan or higher")
+        
+        # Get Coinbase Commerce API key
+        coinbase_api_key = os.environ.get('COINBASE_API_KEY')
+        if not coinbase_api_key or coinbase_api_key == "your_coinbase_commerce_api_key_here":
+            raise HTTPException(status_code=503, detail="Cryptocurrency payments are not configured yet. Please contact support.")
+        
+        # Prepare charge data for Coinbase Commerce
+        api_headers = {
+            "X-CC-Api-Key": coinbase_api_key,
+            "Content-Type": "application/json",
+            "X-CC-Version": "2018-03-22"
+        }
+        
+        charge_data = {
+            "name": f"Telegram Monitor {charge_request.plan.capitalize()} Plan",
+            "description": f"Upgrade to {charge_request.plan.capitalize()} Plan - Multi-Account Session Monitoring",
+            "local_price": {
+                "amount": str(plan_price),
+                "currency": "USD"
+            },
+            "pricing_type": "fixed_price",
+            "metadata": {
+                "user_id": current_user["id"],
+                "organization_id": current_user["organization_id"],
+                "plan": charge_request.plan,
+                "current_plan": current_plan
+            }
+        }
+        
+        # Create charge via Coinbase Commerce API
+        response = requests.post(
+            "https://api.commerce.coinbase.com/charges",
+            headers=api_headers,
+            json=charge_data,
+            timeout=30
+        )
+        
+        if response.status_code != 201:
+            logger.error(f"Coinbase Commerce API Error: {response.status_code} - {response.text}")
+            raise HTTPException(status_code=502, detail="Failed to create payment charge. Please try again.")
+        
+        charge_response = response.json()
+        charge_data_response = charge_response.get("data", {})
+        
+        # Store pending charge in database
+        pending_charge = {
+            "id": str(uuid.uuid4()),
+            "charge_id": charge_data_response.get("id"),
+            "user_id": current_user["id"],
+            "organization_id": current_user["organization_id"],
+            "plan": charge_request.plan,
+            "amount": str(plan_price),
+            "currency": "USD",
+            "status": "pending",
+            "created_at": datetime.utcnow(),
+            "expires_at": datetime.utcnow() + timedelta(hours=1),  # Charges expire in 1 hour
+            "hosted_url": charge_data_response.get("hosted_url"),
+            "coinbase_response": charge_data_response
+        }
+        
+        await db.crypto_charges.insert_one(pending_charge)
+        
+        # Log the charge creation
+        logger.info(f"Created crypto charge {charge_data_response.get('id')} for user {current_user['id']} - {charge_request.plan} plan (${plan_price})")
+        
+        return CryptoChargeResponse(
+            hosted_url=charge_data_response.get("hosted_url"),
+            charge_id=charge_data_response.get("id"),
+            amount=str(plan_price),
+            plan=charge_request.plan
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating crypto charge: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create payment charge")
+
+@api_router.post("/crypto/webhook")
+async def handle_crypto_webhook(request: Request):
+    """Handle Coinbase Commerce webhook notifications"""
+    try:
+        # Get webhook secret
+        webhook_secret = os.environ.get('COINBASE_WEBHOOK_SECRET')
+        if not webhook_secret or webhook_secret == "your_coinbase_webhook_secret_here":
+            logger.error("Coinbase webhook secret not configured")
+            return JSONResponse(status_code=503, content={"error": "Webhook not configured"})
+        
+        # Get request body and signature
+        body = await request.body()
+        signature = request.headers.get("X-CC-Webhook-Signature", "")
+        
+        # Verify webhook signature
+        expected_signature = hmac.new(
+            webhook_secret.encode('utf-8'),
+            body,
+            hashlib.sha256
+        ).hexdigest()
+        
+        if not hmac.compare_digest(signature, expected_signature):
+            logger.warning("Invalid webhook signature received")
+            return JSONResponse(status_code=403, content={"error": "Invalid signature"})
+        
+        # Parse webhook payload
+        payload = json.loads(body.decode('utf-8'))
+        event_type = payload.get("event", {}).get("type")
+        event_data = payload.get("event", {}).get("data", {})
+        
+        logger.info(f"Received Coinbase webhook: {event_type}")
+        
+        # Handle charge confirmation
+        if event_type == "charge:confirmed":
+            charge_id = event_data.get("id")
+            
+            # Find pending charge in database
+            pending_charge = await db.crypto_charges.find_one({"charge_id": charge_id})
+            
+            if not pending_charge:
+                logger.warning(f"No pending charge found for {charge_id}")
+                return JSONResponse(status_code=404, content={"error": "Charge not found"})
+            
+            # Update organization plan
+            await db.organizations.update_one(
+                {"id": pending_charge["organization_id"]},
+                {
+                    "$set": {
+                        "plan": pending_charge["plan"],
+                        "updated_at": datetime.utcnow(),
+                        "payment_method": "cryptocurrency",
+                        "last_payment_date": datetime.utcnow()
+                    }
+                }
+            )
+            
+            # Update charge status
+            await db.crypto_charges.update_one(
+                {"charge_id": charge_id},
+                {
+                    "$set": {
+                        "status": "confirmed",
+                        "confirmed_at": datetime.utcnow(),
+                        "payment_data": event_data
+                    }
+                }
+            )
+            
+            # Log successful payment
+            logger.info(f"✅ Payment confirmed: User {pending_charge['user_id']} upgraded to {pending_charge['plan']} plan (${pending_charge['amount']})")
+            
+            return JSONResponse(status_code=200, content={"message": "Payment processed successfully"})
+        
+        # Handle charge failure
+        elif event_type == "charge:failed":
+            charge_id = event_data.get("id")
+            
+            # Update charge status
+            await db.crypto_charges.update_one(
+                {"charge_id": charge_id},
+                {
+                    "$set": {
+                        "status": "failed",
+                        "failed_at": datetime.utcnow(),
+                        "failure_data": event_data
+                    }
+                }
+            )
+            
+            logger.warning(f"❌ Payment failed: Charge {charge_id}")
+            
+            return JSONResponse(status_code=200, content={"message": "Payment failure recorded"})
+        
+        # Handle other events
+        else:
+            logger.info(f"Unhandled webhook event: {event_type}")
+            return JSONResponse(status_code=200, content={"message": "Event acknowledged"})
+        
+    except Exception as e:
+        logger.error(f"Error handling crypto webhook: {e}")
+        return JSONResponse(status_code=500, content={"error": "Webhook processing failed"})
+
+@api_router.get("/crypto/charges")
+async def get_crypto_charges(current_user: dict = Depends(get_current_user)):
+    """Get user's cryptocurrency payment history"""
+    try:
+        charges = await db.crypto_charges.find({
+            "organization_id": current_user["organization_id"]
+        }).sort("created_at", -1).to_list(50)
+        
+        # Clean up sensitive data
+        for charge in charges:
+            charge.pop("coinbase_response", None)
+            charge.pop("payment_data", None)
+            charge["_id"] = str(charge["_id"])
+        
+        return {"charges": charges}
+        
+    except Exception as e:
+        logger.error(f"Error getting crypto charges: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get payment history")
+
 # ================== ENHANCED STARTUP EVENT HANDLERS ==================
 
 # Include the router in the main app after all routes are defined
