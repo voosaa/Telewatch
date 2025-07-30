@@ -54,6 +54,40 @@ class TelegramBotAPITester:
         self.test_user_data = None
         self.telegram_bot_token = "8342094196:AAE-E8jIYLjYflUPtY0G02NLbogbDpN_FE8"  # From backend .env
 
+    def generate_telegram_auth_data(self, telegram_id: int, first_name: str, last_name: str = None, username: str = None, photo_url: str = None) -> Dict[str, Any]:
+        """Generate valid Telegram authentication data with proper hash"""
+        auth_date = int(datetime.now(timezone.utc).timestamp())
+        
+        # Create auth data
+        auth_data = {
+            'id': telegram_id,
+            'first_name': first_name,
+            'auth_date': auth_date
+        }
+        
+        if last_name:
+            auth_data['last_name'] = last_name
+        if username:
+            auth_data['username'] = username
+        if photo_url:
+            auth_data['photo_url'] = photo_url
+        
+        # Create data check string (sorted by key)
+        data_check_arr = [f"{key}={value}" for key, value in sorted(auth_data.items())]
+        data_check_string = '\n'.join(data_check_arr)
+        
+        # Create secret key from bot token
+        secret_key = hashlib.sha256(self.telegram_bot_token.encode()).digest()
+        
+        # Generate hash
+        calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+        
+        # Add hash to auth data
+        auth_data['hash'] = calculated_hash
+        
+        return auth_data
+        self.telegram_bot_token = "8342094196:AAE-E8jIYLjYflUPtY0G02NLbogbDpN_FE8"  # From backend .env
+
     def log_test(self, test_name: str, success: bool, details: str = "", response_data: Any = None):
         """Log test results"""
         result = {
