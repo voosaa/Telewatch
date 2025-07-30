@@ -1,10 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import TelegramLoginButton from 'react-telegram-login';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserPlus, AlertCircle, Building, Bot, Check } from 'lucide-react';
+
+const TelegramLoginWidget = ({ botName, onAuth }) => {
+  useEffect(() => {
+    // Create script element for Telegram Login Widget
+    const script = document.createElement('script');
+    script.src = 'https://telegram.org/js/telegram-widget.js?22';
+    script.setAttribute('data-telegram-login', botName);
+    script.setAttribute('data-size', 'large');
+    script.setAttribute('data-radius', '8');
+    script.setAttribute('data-request-access', 'write');
+    script.setAttribute('data-userpic', 'false');
+    script.async = true;
+    
+    // Create callback function
+    window.onTelegramAuth = onAuth;
+    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+    
+    // Add script to page
+    const container = document.getElementById('telegram-register-container');
+    if (container) {
+      container.appendChild(script);
+    }
+    
+    // Cleanup
+    return () => {
+      if (container) {
+        container.innerHTML = '';
+      }
+      delete window.onTelegramAuth;
+    };
+  }, [botName, onAuth]);
+  
+  return <div id="telegram-register-container"></div>;
+};
 
 const schema = yup.object({
   organizationName: yup.string().required('Organization name is required')
@@ -70,8 +103,8 @@ const TelegramRegister = ({ onSwitchToLogin }) => {
     setError('');
   };
 
-  // Get bot username from Telegram token
-  const botName = 'Telewatch_test_bot'; // This should match your bot's username
+  // Bot username (without @)
+  const botName = 'Telewatch_test_bot';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -115,12 +148,9 @@ const TelegramRegister = ({ onSwitchToLogin }) => {
               </div>
               
               <div className="flex justify-center">
-                <TelegramLoginButton
-                  dataOnauth={handleTelegramResponse}
+                <TelegramLoginWidget 
                   botName={botName}
-                  buttonSize="large"
-                  cornerRadius={8}
-                  requestAccess="write"
+                  onAuth={handleTelegramResponse}
                 />
               </div>
               
