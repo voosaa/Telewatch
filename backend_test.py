@@ -1646,6 +1646,20 @@ class TelegramBotAPITester:
         print("🚀 Starting Account Management System Tests")
         print("=" * 60)
         
+        # Setup authentication first (required for account management endpoints)
+        if not self.auth_token:
+            print("🔐 Setting up authentication for account management tests...")
+            auth_success = self.setup_telegram_authentication()
+            if not auth_success:
+                print("❌ Authentication setup failed. Cannot proceed with account management tests.")
+                return {
+                    'total': 0,
+                    'passed': 0,
+                    'failed': 0,
+                    'success_rate': 0,
+                    'results': []
+                }
+        
         # Test all account management endpoints
         self.test_account_management_list_accounts()
         self.test_account_management_file_upload()
@@ -1689,6 +1703,66 @@ class TelegramBotAPITester:
             'success_rate': (passed_tests/total_tests)*100 if total_tests > 0 else 0,
             'results': account_tests
         }
+
+    def setup_telegram_authentication(self):
+        """Setup Telegram authentication for testing protected endpoints"""
+        try:
+            # Register a new user for testing
+            import random
+            import time
+            
+            timestamp = int(time.time())
+            random_suffix = random.randint(1000, 9999)
+            
+            telegram_id = random.randint(100000000, 999999999)
+            username = f"account_test_user_{timestamp}_{random_suffix}"
+            org_name = f"Account Test Organization {timestamp}"
+            
+            registration_data = {
+                "telegram_id": telegram_id,
+                "username": username,
+                "first_name": "Account",
+                "last_name": "Tester",
+                "photo_url": "https://example.com/photo.jpg",
+                "organization_name": org_name
+            }
+            
+            response = self.session.post(f"{API_BASE}/auth/register", json=registration_data)
+            
+            if response.status_code == 200:
+                auth_response = response.json()
+                self.auth_token = auth_response.get('access_token')
+                user_data = auth_response.get('user')
+                
+                # Set authorization header
+                self.session.headers.update({
+                    'Authorization': f'Bearer {self.auth_token}'
+                })
+                
+                # Store test user data
+                self.test_user_data = {
+                    'telegram_id': telegram_id,
+                    'username': username,
+                    'organization_name': org_name,
+                    'user_id': user_data.get('id'),
+                    'organization_id': user_data.get('organization_id')
+                }
+                
+                # Store for cleanup
+                self.created_resources['users'].append(user_data.get('id'))
+                self.created_resources['organizations'].append(user_data.get('organization_id'))
+                
+                self.log_test("Authentication Setup for Account Tests", True, 
+                            f"Created test user: {username} in org: {org_name}")
+                return True
+            else:
+                self.log_test("Authentication Setup for Account Tests", False, 
+                            f"Registration failed: HTTP {response.status_code}", response.text)
+                return False
+                
+        except Exception as e:
+            self.log_test("Authentication Setup for Account Tests", False, f"Error: {str(e)}")
+            return False
         """Clean up authentication-related test resources"""
         print("\n🧹 Cleaning up authentication resources...")
         
