@@ -651,6 +651,17 @@ backend:
         comment: "✅ TESTED: Comprehensive Telegram Bot Command functionality testing completed with 100% success rate (22/22 tests passed). **BOT COMMANDS:** All primary commands working perfectly - /start shows main menu with inline keyboards, /help displays comprehensive help information, /menu provides navigation interface. **INLINE KEYBOARDS & CALLBACKS:** All 8 callback query handlers operational (status, groups, watchlist, messages, settings, help, main_menu, admin_menu) with proper MarkdownV2 formatting and interactive navigation. **BOT AUTHENTICATION:** Webhook authentication working with proper secret validation - valid secrets accepted, invalid secrets rejected with HTTP 403. **DATABASE INTEGRATION:** Bot successfully accesses all backend systems - statistics API, groups management, watchlist data with proper multi-tenant isolation. **ERROR HANDLING:** Robust error handling for unknown commands and callback queries - all handled gracefully without crashes. **MULTI-TENANT SUPPORT:** Bot properly processes commands with tenant-specific data, respects organization boundaries. **BOT SETUP:** Bot connection verified (@Telewatch_test_bot, ID: 8342094196), webhook configured successfully, all handlers registered and operational. The Telegram Bot provides a professional interface for users to interact with the monitoring system with seamless integration to the web dashboard for full functionality."
 
 frontend:
+  - task: "Coinbase Commerce Cryptocurrency Payment Integration"
+    implemented: false
+    working: false
+    file: "SubscriptionManager.js, server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "💰 FEATURE REQUEST: Add cryptocurrency payment methods to upgrade to premium functions. Support BTC, ETH, USDT, USDC, Solana using Coinbase Commerce. Pro Plan: $9.99, Pro Enterprise: $19.99. Need to integrate with existing subscription management system."
   - task: "Telegram Login Widget - JavaScript Runtime Error on Authentication"
     implemented: true
     working: true
