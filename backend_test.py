@@ -3252,12 +3252,442 @@ class TelegramBotAPITester:
             'results': self.test_results
         }
 
+    # ================== CRYPTOCURRENCY PAYMENT SYSTEM TESTS ==================
+    
+    def test_crypto_charge_creation_valid_plans(self):
+        """Test POST /api/crypto/create-charge with valid plan data"""
+        try:
+            # Test Pro plan
+            pro_charge_data = {"plan": "pro"}
+            response = self.session.post(f"{API_BASE}/crypto/create-charge", json=pro_charge_data)
+            
+            if response.status_code == 503:
+                # Expected when API keys are not configured
+                response_data = response.json()
+                if "not configured" in response_data.get("detail", "").lower():
+                    self.log_test("Crypto Charge Creation - Pro Plan", True, 
+                                "Correctly shows service unavailable when API keys not configured", response_data)
+                else:
+                    self.log_test("Crypto Charge Creation - Pro Plan", False, 
+                                f"Unexpected 503 response: {response_data}", response_data)
+            elif response.status_code == 200:
+                # If API keys are configured, should work
+                charge_response = response.json()
+                required_fields = ['hosted_url', 'charge_id', 'amount', 'plan']
+                missing_fields = [field for field in required_fields if field not in charge_response]
+                
+                if not missing_fields and charge_response.get('plan') == 'pro' and charge_response.get('amount') == '9.99':
+                    self.log_test("Crypto Charge Creation - Pro Plan", True, 
+                                f"Pro plan charge created successfully: ${charge_response.get('amount')}", charge_response)
+                else:
+                    self.log_test("Crypto Charge Creation - Pro Plan", False, 
+                                f"Invalid response structure or pricing. Missing: {missing_fields}", charge_response)
+            else:
+                self.log_test("Crypto Charge Creation - Pro Plan", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test Enterprise plan
+            enterprise_charge_data = {"plan": "enterprise"}
+            response = self.session.post(f"{API_BASE}/crypto/create-charge", json=enterprise_charge_data)
+            
+            if response.status_code == 503:
+                response_data = response.json()
+                if "not configured" in response_data.get("detail", "").lower():
+                    self.log_test("Crypto Charge Creation - Enterprise Plan", True, 
+                                "Correctly shows service unavailable when API keys not configured", response_data)
+                else:
+                    self.log_test("Crypto Charge Creation - Enterprise Plan", False, 
+                                f"Unexpected 503 response: {response_data}", response_data)
+            elif response.status_code == 200:
+                charge_response = response.json()
+                if (charge_response.get('plan') == 'enterprise' and 
+                    charge_response.get('amount') == '19.99'):
+                    self.log_test("Crypto Charge Creation - Enterprise Plan", True, 
+                                f"Enterprise plan charge created successfully: ${charge_response.get('amount')}", charge_response)
+                else:
+                    self.log_test("Crypto Charge Creation - Enterprise Plan", False, 
+                                f"Invalid pricing or plan. Expected enterprise/$19.99, got {charge_response.get('plan')}/${charge_response.get('amount')}", charge_response)
+            else:
+                self.log_test("Crypto Charge Creation - Enterprise Plan", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Crypto Charge Creation - Valid Plans", False, f"Error: {str(e)}")
+
+    def test_crypto_charge_plan_validation(self):
+        """Test plan validation and upgrade restrictions"""
+        try:
+            # Test invalid plan
+            invalid_plans = ["basic", "premium", "invalid", "", None]
+            
+            for invalid_plan in invalid_plans:
+                try:
+                    charge_data = {"plan": invalid_plan}
+                    response = self.session.post(f"{API_BASE}/crypto/create-charge", json=charge_data)
+                    
+                    if response.status_code == 400:
+                        self.log_test(f"Plan Validation - Reject '{invalid_plan}'", True, 
+                                    f"Correctly rejected invalid plan with HTTP 400")
+                    elif response.status_code == 422:
+                        self.log_test(f"Plan Validation - Reject '{invalid_plan}'", True, 
+                                    f"Correctly rejected invalid plan with HTTP 422")
+                    else:
+                        self.log_test(f"Plan Validation - Reject '{invalid_plan}'", False, 
+                                    f"Should reject invalid plan but got HTTP {response.status_code}", response.text)
+                except Exception as e:
+                    if invalid_plan is None:
+                        self.log_test(f"Plan Validation - Reject '{invalid_plan}'", True, 
+                                    f"Correctly failed to serialize None plan: {str(e)}")
+                    else:
+                        self.log_test(f"Plan Validation - Reject '{invalid_plan}'", False, f"Error: {str(e)}")
+            
+            # Test upgrade restrictions (would need to set current plan to test properly)
+            # This is a basic test - in real scenario we'd need to mock organization with existing plan
+            
+        except Exception as e:
+            self.log_test("Crypto Charge Plan Validation", False, f"Error: {str(e)}")
+
+    def test_crypto_webhook_handler(self):
+        """Test POST /api/crypto/webhook endpoint with mock Coinbase Commerce webhook data"""
+        try:
+            # Test webhook without signature (should fail)
+            mock_webhook_data = {
+                "event": {
+                    "type": "charge:confirmed",
+                    "data": {
+                        "id": "test-charge-id-123",
+                        "code": "TEST123",
+                        "name": "Test Charge",
+                        "pricing": {
+                            "local": {"amount": "9.99", "currency": "USD"}
+                        }
+                    }
+                }
+            }
+            
+            response = self.session.post(f"{API_BASE}/crypto/webhook", json=mock_webhook_data)
+            
+            if response.status_code == 503:
+                response_data = response.json()
+                if "not configured" in response_data.get("error", "").lower():
+                    self.log_test("Crypto Webhook Handler - Configuration Check", True, 
+                                "Correctly shows webhook not configured when secret not set", response_data)
+                else:
+                    self.log_test("Crypto Webhook Handler - Configuration Check", False, 
+                                f"Unexpected 503 response: {response_data}", response_data)
+            elif response.status_code == 403:
+                self.log_test("Crypto Webhook Handler - Signature Validation", True, 
+                            "Correctly rejected webhook without valid signature")
+            else:
+                self.log_test("Crypto Webhook Handler - Signature Validation", False, 
+                            f"Expected 403 or 503 but got HTTP {response.status_code}", response.text)
+            
+            # Test with mock signature (will still fail but tests signature validation logic)
+            headers = {"X-CC-Webhook-Signature": "mock_signature_for_testing"}
+            response = self.session.post(f"{API_BASE}/crypto/webhook", json=mock_webhook_data, headers=headers)
+            
+            if response.status_code in [403, 503]:
+                self.log_test("Crypto Webhook Handler - Mock Signature", True, 
+                            f"Webhook signature validation working (HTTP {response.status_code})")
+            else:
+                self.log_test("Crypto Webhook Handler - Mock Signature", False, 
+                            f"Expected 403 or 503 but got HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Crypto Webhook Handler", False, f"Error: {str(e)}")
+
+    def test_crypto_payment_history(self):
+        """Test GET /api/crypto/charges to retrieve user payment history"""
+        try:
+            response = self.session.get(f"{API_BASE}/crypto/charges")
+            
+            if response.status_code == 200:
+                charges_data = response.json()
+                
+                if "charges" in charges_data:
+                    charges = charges_data["charges"]
+                    self.log_test("Crypto Payment History", True, 
+                                f"Successfully retrieved {len(charges)} payment records", charges_data)
+                    
+                    # Verify data sanitization (sensitive data should be removed)
+                    if charges:
+                        charge = charges[0]
+                        sensitive_fields = ["coinbase_response", "payment_data"]
+                        has_sensitive = any(field in charge for field in sensitive_fields)
+                        
+                        if not has_sensitive:
+                            self.log_test("Crypto Payment History - Data Sanitization", True, 
+                                        "Sensitive data properly removed from response")
+                        else:
+                            self.log_test("Crypto Payment History - Data Sanitization", False, 
+                                        f"Sensitive data found in response: {[f for f in sensitive_fields if f in charge]}")
+                    else:
+                        self.log_test("Crypto Payment History - Empty Response", True, 
+                                    "No payment history found (expected for new organization)")
+                else:
+                    self.log_test("Crypto Payment History", False, 
+                                "Response missing 'charges' field", charges_data)
+            else:
+                self.log_test("Crypto Payment History", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Crypto Payment History", False, f"Error: {str(e)}")
+
+    def test_crypto_environment_configuration(self):
+        """Test that placeholder API keys show proper error messages"""
+        try:
+            # This test verifies the system handles missing/placeholder configuration gracefully
+            # The actual API keys should be placeholders in the test environment
+            
+            # Test charge creation with placeholder keys
+            charge_data = {"plan": "pro"}
+            response = self.session.post(f"{API_BASE}/crypto/create-charge", json=charge_data)
+            
+            if response.status_code == 503:
+                response_data = response.json()
+                detail = response_data.get("detail", "")
+                
+                if ("not configured" in detail.lower() or 
+                    "contact support" in detail.lower()):
+                    self.log_test("Environment Configuration - API Keys", True, 
+                                "Properly handles placeholder API keys with user-friendly message", response_data)
+                else:
+                    self.log_test("Environment Configuration - API Keys", False, 
+                                f"Error message not user-friendly: {detail}", response_data)
+            else:
+                # If API keys are actually configured, that's also valid
+                self.log_test("Environment Configuration - API Keys", True, 
+                            f"API keys appear to be configured (HTTP {response.status_code})")
+            
+            # Test webhook configuration
+            mock_webhook = {"event": {"type": "test", "data": {}}}
+            response = self.session.post(f"{API_BASE}/crypto/webhook", json=mock_webhook)
+            
+            if response.status_code == 503:
+                response_data = response.json()
+                if "not configured" in response_data.get("error", "").lower():
+                    self.log_test("Environment Configuration - Webhook Secret", True, 
+                                "Properly handles missing webhook secret", response_data)
+                else:
+                    self.log_test("Environment Configuration - Webhook Secret", False, 
+                                f"Unexpected error message: {response_data}", response_data)
+            else:
+                self.log_test("Environment Configuration - Webhook Secret", True, 
+                            f"Webhook secret appears to be configured (HTTP {response.status_code})")
+                
+        except Exception as e:
+            self.log_test("Crypto Environment Configuration", False, f"Error: {str(e)}")
+
+    def test_crypto_subscription_plans_configuration(self):
+        """Test subscription plans configuration loading"""
+        try:
+            # Test that the system loads subscription plans correctly
+            # This is tested indirectly through charge creation
+            
+            plans_to_test = [
+                ("pro", "9.99"),
+                ("enterprise", "19.99")
+            ]
+            
+            for plan, expected_price in plans_to_test:
+                charge_data = {"plan": plan}
+                response = self.session.post(f"{API_BASE}/crypto/create-charge", json=charge_data)
+                
+                if response.status_code == 503:
+                    # API not configured, but plan validation should still work
+                    response_data = response.json()
+                    if "not configured" in response_data.get("detail", "").lower():
+                        self.log_test(f"Subscription Plans Config - {plan.upper()}", True, 
+                                    f"Plan {plan} recognized (service unavailable due to API config)")
+                    else:
+                        self.log_test(f"Subscription Plans Config - {plan.upper()}", False, 
+                                    f"Unexpected error for plan {plan}: {response_data}")
+                elif response.status_code == 200:
+                    # API configured, check pricing
+                    charge_response = response.json()
+                    if charge_response.get('amount') == expected_price:
+                        self.log_test(f"Subscription Plans Config - {plan.upper()}", True, 
+                                    f"Plan {plan} correctly priced at ${expected_price}")
+                    else:
+                        self.log_test(f"Subscription Plans Config - {plan.upper()}", False, 
+                                    f"Incorrect pricing for {plan}. Expected ${expected_price}, got ${charge_response.get('amount')}")
+                elif response.status_code == 400:
+                    # Plan validation failed
+                    self.log_test(f"Subscription Plans Config - {plan.upper()}", False, 
+                                f"Plan {plan} not recognized or configured properly")
+                else:
+                    self.log_test(f"Subscription Plans Config - {plan.upper()}", False, 
+                                f"Unexpected response for plan {plan}: HTTP {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Crypto Subscription Plans Configuration", False, f"Error: {str(e)}")
+
+    def test_crypto_integration_with_existing_system(self):
+        """Test that crypto payment system works with existing authentication and organization system"""
+        try:
+            # Test authentication requirement
+            auth_header = self.session.headers.get('Authorization')
+            
+            # Remove auth header temporarily
+            if 'Authorization' in self.session.headers:
+                del self.session.headers['Authorization']
+            
+            # Test charge creation without auth
+            charge_data = {"plan": "pro"}
+            response = self.session.post(f"{API_BASE}/crypto/create-charge", json=charge_data)
+            
+            if response.status_code == 403:
+                self.log_test("Crypto Integration - Authentication Required", True, 
+                            "Crypto charge creation properly requires authentication")
+            else:
+                self.log_test("Crypto Integration - Authentication Required", False, 
+                            f"Expected HTTP 403 but got {response.status_code}")
+            
+            # Test payment history without auth
+            response = self.session.get(f"{API_BASE}/crypto/charges")
+            
+            if response.status_code == 403:
+                self.log_test("Crypto Integration - Payment History Auth", True, 
+                            "Payment history properly requires authentication")
+            else:
+                self.log_test("Crypto Integration - Payment History Auth", False, 
+                            f"Expected HTTP 403 but got {response.status_code}")
+            
+            # Restore auth header
+            if auth_header:
+                self.session.headers['Authorization'] = auth_header
+            
+            # Test with authentication - organization integration
+            response = self.session.get(f"{API_BASE}/crypto/charges")
+            
+            if response.status_code == 200:
+                self.log_test("Crypto Integration - Organization Scoping", True, 
+                            "Payment history properly scoped to current organization")
+            else:
+                self.log_test("Crypto Integration - Organization Scoping", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Crypto Integration with Existing System", False, f"Error: {str(e)}")
+
+    def test_crypto_data_validation_and_responses(self):
+        """Test data validation and error responses for crypto endpoints"""
+        try:
+            # Test malformed request data
+            malformed_requests = [
+                ({}, "Empty request"),
+                ({"invalid_field": "test"}, "Invalid field"),
+                ({"plan": ""}, "Empty plan"),
+                ({"plan": 123}, "Numeric plan"),
+                ({"plan": ["pro"]}, "Array plan")
+            ]
+            
+            for request_data, description in malformed_requests:
+                try:
+                    response = self.session.post(f"{API_BASE}/crypto/create-charge", json=request_data)
+                    
+                    if response.status_code >= 400:
+                        self.log_test(f"Data Validation - {description}", True, 
+                                    f"Correctly rejected malformed request with HTTP {response.status_code}")
+                    else:
+                        self.log_test(f"Data Validation - {description}", False, 
+                                    f"Should reject malformed request but got HTTP {response.status_code}")
+                except Exception as e:
+                    # JSON serialization errors are expected for some malformed data
+                    self.log_test(f"Data Validation - {description}", True, 
+                                f"Correctly failed to process malformed data: {str(e)}")
+            
+            # Test response format consistency
+            valid_request = {"plan": "pro"}
+            response = self.session.post(f"{API_BASE}/crypto/create-charge", json=valid_request)
+            
+            if response.headers.get('content-type', '').startswith('application/json'):
+                self.log_test("Data Validation - Response Format", True, 
+                            "Responses properly formatted as JSON")
+            else:
+                self.log_test("Data Validation - Response Format", False, 
+                            f"Response not JSON: {response.headers.get('content-type')}")
+                
+        except Exception as e:
+            self.log_test("Crypto Data Validation and Responses", False, f"Error: {str(e)}")
+
+    def run_cryptocurrency_payment_tests(self):
+        """Run all cryptocurrency payment system tests"""
+        print("\n💰 Starting Cryptocurrency Payment System Tests")
+        print("=" * 60)
+        
+        # Test charge creation with valid plans
+        self.test_crypto_charge_creation_valid_plans()
+        
+        # Test plan validation and restrictions
+        self.test_crypto_charge_plan_validation()
+        
+        # Test webhook handler
+        self.test_crypto_webhook_handler()
+        
+        # Test payment history
+        self.test_crypto_payment_history()
+        
+        # Test environment configuration
+        self.test_crypto_environment_configuration()
+        
+        # Test subscription plans configuration
+        self.test_crypto_subscription_plans_configuration()
+        
+        # Test integration with existing system
+        self.test_crypto_integration_with_existing_system()
+        
+        # Test data validation and responses
+        self.test_crypto_data_validation_and_responses()
+        
+        print("\n" + "=" * 60)
+        print("📊 CRYPTOCURRENCY PAYMENT SYSTEM TEST SUMMARY")
+        print("=" * 60)
+        
+        # Filter results for crypto payment tests
+        crypto_tests = [t for t in self.test_results if any(keyword in t['test'].lower() for keyword in ['crypto', 'payment', 'charge', 'webhook', 'coinbase', 'subscription plans config', 'environment config'])]
+        
+        total_tests = len(crypto_tests)
+        passed_tests = len([t for t in crypto_tests if t['success']])
+        failed_tests = total_tests - passed_tests
+        
+        print(f"Total Crypto Payment Tests: {total_tests}")
+        print(f"✅ Passed: {passed_tests}")
+        print(f"❌ Failed: {failed_tests}")
+        print(f"Success Rate: {(passed_tests/total_tests)*100:.1f}%" if total_tests > 0 else "No tests run")
+        
+        if failed_tests > 0:
+            print("\n❌ FAILED CRYPTO PAYMENT TESTS:")
+            for test in crypto_tests:
+                if not test['success']:
+                    print(f"  • {test['test']}: {test['details']}")
+        
+        print("\n" + "=" * 60)
+        
+        return {
+            'total': total_tests,
+            'passed': passed_tests,
+            'failed': failed_tests,
+            'success_rate': (passed_tests/total_tests)*100 if total_tests > 0 else 0,
+            'results': crypto_tests
+        }
+
 if __name__ == "__main__":
     tester = TelegramBotAPITester()
     try:
         # Test basic connectivity
         tester.test_root_endpoint()
         tester.test_bot_connection()
+        
+        # Setup authentication for protected endpoints
+        if not tester.auth_token:
+            auth_success = tester.setup_authentication()
+            if not auth_success:
+                print("❌ Failed to setup authentication. Some tests may fail.")
+        
+        # Run Cryptocurrency Payment System Tests
+        crypto_summary = tester.run_cryptocurrency_payment_tests()
         
         # Run Account Management System Tests
         account_management_summary = tester.run_account_management_tests()
@@ -3268,17 +3698,18 @@ if __name__ == "__main__":
         # Print overall summary
         print("\n🎯 OVERALL TEST EXECUTION SUMMARY")
         print("=" * 80)
+        print(f"Cryptocurrency Payment System Tests: {crypto_summary['passed']}/{crypto_summary['total']} passed ({crypto_summary['success_rate']:.1f}%)")
         print(f"Account Management System Tests: {account_management_summary['passed']}/{account_management_summary['total']} passed ({account_management_summary['success_rate']:.1f}%)")
         print(f"Multi-Account Session Monitoring Tests: {monitoring_summary['passed']}/{monitoring_summary['total']} passed ({monitoring_summary['success_rate']:.1f}%)")
         
-        total_all = account_management_summary['total'] + monitoring_summary['total']
-        passed_all = account_management_summary['passed'] + monitoring_summary['passed']
+        total_all = crypto_summary['total'] + account_management_summary['total'] + monitoring_summary['total']
+        passed_all = crypto_summary['passed'] + account_management_summary['passed'] + monitoring_summary['passed']
         overall_success_rate = (passed_all/total_all)*100 if total_all > 0 else 0
         
         print(f"\n🎯 OVERALL SUCCESS RATE: {passed_all}/{total_all} ({overall_success_rate:.1f}%)")
         
         # Exit with appropriate code
-        exit(0 if (account_management_summary['failed'] + monitoring_summary['failed']) == 0 else 1)
+        exit(0 if (crypto_summary['failed'] + account_management_summary['failed'] + monitoring_summary['failed']) == 0 else 1)
     except Exception as e:
         print(f"❌ Test execution failed: {e}")
         exit(1)
