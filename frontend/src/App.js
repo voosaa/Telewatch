@@ -39,6 +39,7 @@ const API = `${BACKEND_URL}/api`;
 const Sidebar = ({ activeTab, setActiveTab, user, organization, logout }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3, roles: ['owner', 'admin', 'viewer'] },
+    { id: 'accounts', label: 'Accounts', icon: User, roles: ['owner', 'admin'] },
     { id: 'groups', label: 'Groups', icon: Users, roles: ['owner', 'admin', 'viewer'] },
     { id: 'watchlist', label: 'Watchlist', icon: Shield, roles: ['owner', 'admin', 'viewer'] },
     { id: 'forwarding', label: 'Forwarding', icon: ChevronRight, roles: ['owner', 'admin', 'viewer'] },
