@@ -25,6 +25,7 @@ const TelegramLogin = ({ onSwitchToRegister }) => {
         setError(result.error);
       }
     } catch (err) {
+      console.error('Telegram authentication error:', err);
       setError('Failed to authenticate with Telegram. Please try again.');
     } finally {
       setIsLoading(false);
@@ -33,94 +34,105 @@ const TelegramLogin = ({ onSwitchToRegister }) => {
 
   // Load Telegram Widget script and initialize
   useEffect(() => {
-    // Make the callback function globally available
+    // Make the callback function globally available with consistent naming
     window.onTelegramAuth = handleTelegramAuth;
+    
+    // Also set up the alternative callback name for compatibility
+    window.telegramLoginCallback = handleTelegramAuth;
 
-    // Check if script is already loaded
-    if (document.getElementById('telegram-widget-script')) {
-      initializeTelegramWidget();
-      return;
+    // Load Telegram Widget script if not already loaded
+    if (!document.getElementById('telegram-widget-script')) {
+      const script = document.createElement('script');
+      script.id = 'telegram-widget-script';
+      script.src = 'https://telegram.org/js/telegram-widget.js?22';
+      script.async = true;
+      script.onerror = () => {
+        setError('Failed to load Telegram authentication widget. Please refresh and try again.');
+      };
+      
+      document.head.appendChild(script);
     }
 
-    // Load Telegram Widget script
-    const script = document.createElement('script');
-    script.id = 'telegram-widget-script';
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.async = true;
-    script.onload = () => {
-      initializeTelegramWidget();
-    };
-    script.onerror = () => {
-      setError('Failed to load Telegram authentication widget. Please refresh and try again.');
-    };
-    
-    document.head.appendChild(script);
+    // Initialize widget after a short delay to ensure script is loaded
+    const initTimer = setTimeout(() => {
+      createTelegramWidget();
+    }, 1000);
 
     return () => {
-      // Clean up global callback
+      // Clean up
+      clearTimeout(initTimer);
       if (window.onTelegramAuth) {
         delete window.onTelegramAuth;
+      }
+      if (window.telegramLoginCallback) {
+        delete window.telegramLoginCallback;
       }
     };
   }, []);
 
-  const initializeTelegramWidget = () => {
-    if (widgetRef.current && window.TelegramLoginWidget) {
-      // Clear any existing widget
+  // Create the Telegram widget
+  const createTelegramWidget = () => {
+    if (!widgetRef.current || widgetLoaded) return;
+
+    try {
+      // Clear any existing content
       widgetRef.current.innerHTML = '';
-      
-      // Create the widget manually as a fallback
+
+      // Create the Telegram login widget script element
       const widget = document.createElement('script');
       widget.setAttribute('src', 'https://telegram.org/js/telegram-widget.js?22');
       widget.setAttribute('data-telegram-login', botUsername);
       widget.setAttribute('data-size', 'large');
-      widget.setAttribute('data-auth-url', window.location.origin + '/telegram-auth');
-      widget.setAttribute('data-request-access', 'write');
       widget.setAttribute('data-onauth', 'onTelegramAuth(user)');
+      widget.setAttribute('data-request-access', 'write');
       
       widgetRef.current.appendChild(widget);
       setWidgetLoaded(true);
+      
+    } catch (err) {
+      console.error('Error creating Telegram widget:', err);
+      // Fallback to iframe approach
+      createTelegramWidgetIframe();
     }
   };
 
-  // Handle manual widget creation as iframe
-  const createTelegramWidget = () => {
+  // Fallback iframe approach
+  const createTelegramWidgetIframe = () => {
     if (!widgetRef.current || widgetLoaded) return;
 
-    const widget = document.createElement('iframe');
-    widget.src = `https://oauth.telegram.org/auth?bot_id=8342094196&origin=${encodeURIComponent(window.location.origin)}&return_to=${encodeURIComponent(window.location.origin)}&embed=1&request_access=write`;
-    widget.width = '100%';
-    widget.height = '186';
-    widget.frameBorder = '0';
-    widget.scrolling = 'no';
-    widget.style.border = 'none';
-    widget.style.borderRadius = '8px';
-    
-    // Listen for messages from the iframe
-    const handleMessage = (event) => {
-      if (event.origin !== 'https://oauth.telegram.org') return;
+    try {
+      const widget = document.createElement('iframe');
+      widget.src = `https://oauth.telegram.org/auth?bot_id=8342094196&origin=${encodeURIComponent(window.location.origin)}&return_to=${encodeURIComponent(window.location.origin)}&embed=1&request_access=write`;
+      widget.width = '100%';
+      widget.height = '186';
+      widget.frameBorder = '0';
+      widget.scrolling = 'no';
+      widget.style.border = 'none';
+      widget.style.borderRadius = '8px';
       
-      if (event.data && typeof event.data === 'object' && event.data.user) {
-        handleTelegramAuth(event.data.user);
-      }
-    };
-    
-    window.addEventListener('message', handleMessage);
-    
-    widgetRef.current.appendChild(widget);
-    setWidgetLoaded(true);
+      // Listen for messages from the iframe
+      const handleMessage = (event) => {
+        if (event.origin !== 'https://oauth.telegram.org') return;
+        
+        try {
+          if (event.data && typeof event.data === 'object' && event.data.user) {
+            handleTelegramAuth(event.data.user);
+          }
+        } catch (err) {
+          console.error('Error processing Telegram auth message:', err);
+        }
+      };
+      
+      window.addEventListener('message', handleMessage);
+      
+      widgetRef.current.appendChild(widget);
+      setWidgetLoaded(true);
+      
+    } catch (err) {
+      console.error('Error creating Telegram iframe widget:', err);
+      setError('Failed to initialize Telegram authentication. Please try refreshing the page.');
+    }
   };
-
-  // Auto-create widget after component mounts
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!widgetLoaded) {
-        createTelegramWidget();
-      }
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  }, [widgetLoaded]);
 
   const handleBotLogin = async () => {
     setError('For development purposes, please use the registration flow or contact support for access.');
