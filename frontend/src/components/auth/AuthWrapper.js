@@ -20,9 +20,9 @@ const AuthWrapper = ({ children }) => {
 
   if (!user) {
     return isLogin ? (
-      <LoginForm onSwitchToRegister={() => setIsLogin(false)} />
+      <TelegramLogin onSwitchToRegister={() => setIsLogin(false)} />
     ) : (
-      <RegisterForm onSwitchToLogin={() => setIsLogin(true)} />
+      <TelegramRegister onSwitchToLogin={() => setIsLogin(true)} />
     );
   }
 
