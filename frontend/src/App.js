@@ -1459,6 +1459,407 @@ const SettingsPage = () => {
   );
 };
 
+// =================== ACCOUNT MANAGEMENT COMPONENT ===================
+
+const AccountManager = () => {
+  const [accounts, setAccounts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    fetchAccounts();
+  }, []);
+
+  const fetchAccounts = async () => {
+    try {
+      const response = await axios.get(`${API}/accounts`);
+      setAccounts(response.data);
+    } catch (error) {
+      console.error('Error fetching accounts:', error);
+      setErrorMessage('Failed to load accounts: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadAccount = async (formData) => {
+    setUploading(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    
+    try {
+      const response = await axios.post(`${API}/accounts/upload`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      setAccounts([...accounts, response.data]);
+      setSuccessMessage('Account uploaded successfully!');
+      setShowUploadModal(false);
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (error) {
+      console.error('Error uploading account:', error);
+      setErrorMessage('Failed to upload account: ' + (error.response?.data?.detail || error.message));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const deleteAccount = async (accountId) => {
+    if (!confirm('Are you sure you want to delete this account? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await axios.delete(`${API}/accounts/${accountId}`);
+      setAccounts(accounts.filter(account => account.id !== accountId));
+      setSuccessMessage('Account deleted successfully!');
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      setErrorMessage('Failed to delete account: ' + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const toggleAccountStatus = async (accountId, currentStatus) => {
+    const action = currentStatus === 'active' ? 'deactivate' : 'activate';
+    
+    try {
+      await axios.post(`${API}/accounts/${accountId}/${action}`);
+      
+      setAccounts(accounts.map(account => 
+        account.id === accountId 
+          ? { ...account, status: currentStatus === 'active' ? 'inactive' : 'active' }
+          : account
+      ));
+      
+      setSuccessMessage(`Account ${action}d successfully!`);
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (error) {
+      console.error(`Error ${action}ing account:`, error);
+      setErrorMessage(`Failed to ${action} account: ` + (error.response?.data?.detail || error.message));
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'active': return 'text-green-600 bg-green-100';
+      case 'inactive': return 'text-gray-600 bg-gray-100';
+      case 'error': return 'text-red-600 bg-red-100';
+      default: return 'text-gray-600 bg-gray-100';
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'active': return <Play className="w-4 h-4" />;
+      case 'inactive': return <Pause className="w-4 h-4" />;
+      case 'error': return <AlertCircle className="w-4 h-4" />;
+      default: return <Pause className="w-4 h-4" />;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Account Management</h1>
+          <p className="text-gray-600">Manage Telegram user accounts for monitoring</p>
+        </div>
+        <button
+          onClick={() => setShowUploadModal(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add Account
+        </button>
+      </div>
+
+      {/* Success/Error Messages */}
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+          ✅ {successMessage}
+        </div>
+      )}
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
+          ❌ {errorMessage}
+        </div>
+      )}
+
+      {/* Accounts List */}
+      <div className="bg-white rounded-lg shadow-md">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Telegram Accounts</h3>
+          <p className="text-sm text-gray-600">
+            {accounts.length} account{accounts.length !== 1 ? 's' : ''} configured
+          </p>
+        </div>
+        
+        {accounts.length === 0 ? (
+          <div className="p-8 text-center">
+            <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No accounts configured</h3>
+            <p className="text-gray-600 mb-4">
+              Upload your first Telegram account session and JSON files to start monitoring.
+            </p>
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 mx-auto"
+            >
+              <Upload className="w-4 h-4" />
+              Add First Account
+            </button>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-200">
+            {accounts.map((account) => (
+              <div key={account.id} className="p-6 hover:bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <User className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-gray-900">{account.name}</h4>
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        {account.phone_number && (
+                          <span className="flex items-center gap-1">
+                            <Phone className="w-3 h-3" />
+                            {account.phone_number}
+                          </span>
+                        )}
+                        {account.username && (
+                          <span>@{account.username}</span>
+                        )}
+                        {account.first_name && (
+                          <span>{account.first_name} {account.last_name}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    {/* Status Badge */}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getStatusColor(account.status)}`}>
+                      {getStatusIcon(account.status)}
+                      {account.status.charAt(0).toUpperCase() + account.status.slice(1)}
+                    </span>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleAccountStatus(account.id, account.status)}
+                        className={`p-2 rounded-lg ${
+                          account.status === 'active' 
+                            ? 'text-red-600 hover:bg-red-50' 
+                            : 'text-green-600 hover:bg-green-50'
+                        }`}
+                        title={account.status === 'active' ? 'Deactivate' : 'Activate'}
+                      >
+                        {account.status === 'active' ? 
+                          <Pause className="w-4 h-4" /> : 
+                          <Play className="w-4 h-4" />
+                        }
+                      </button>
+                      
+                      <button
+                        onClick={() => deleteAccount(account.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                        title="Delete Account"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                {account.error_message && (
+                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-center gap-2 text-red-800 text-sm">
+                      <AlertCircle className="w-4 h-4" />
+                      <span className="font-medium">Error:</span>
+                      {account.error_message}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <AccountUploadModal
+          onClose={() => setShowUploadModal(false)}
+          onUpload={uploadAccount}
+          uploading={uploading}
+        />
+      )}
+    </div>
+  );
+};
+
+const AccountUploadModal = ({ onClose, onUpload, uploading }) => {
+  const [name, setName] = useState('');
+  const [sessionFile, setSessionFile] = useState(null);
+  const [jsonFile, setJsonFile] = useState(null);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (!name.trim()) {
+      setError('Please enter an account name');
+      return;
+    }
+
+    if (!sessionFile) {
+      setError('Please select a session file');
+      return;
+    }
+
+    if (!jsonFile) {
+      setError('Please select a JSON file');
+      return;
+    }
+
+    if (!sessionFile.name.endsWith('.session')) {
+      setError('Session file must have .session extension');
+      return;
+    }
+
+    if (!jsonFile.name.endsWith('.json')) {
+      setError('JSON file must have .json extension');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('name', name.trim());
+    formData.append('session_file', sessionFile);
+    formData.append('json_file', jsonFile);
+
+    await onUpload(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Add Telegram Account</h3>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-800 px-3 py-2 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Account Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter a display name for this account"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={uploading}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Session File (.session)
+            </label>
+            <input
+              type="file"
+              accept=".session"
+              onChange={(e) => setSessionFile(e.target.files[0])}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={uploading}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              JSON File (.json)
+            </label>
+            <input
+              type="file"
+              accept=".json"
+              onChange={(e) => setJsonFile(e.target.files[0])}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={uploading}
+            />
+          </div>
+
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <div className="flex items-start gap-3">
+              <FileText className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <h4 className="font-medium text-blue-900">File Requirements:</h4>
+                <ul className="text-blue-700 mt-1 space-y-1">
+                  <li>• Session file: Telegram account session (.session)</li>
+                  <li>• JSON file: Account metadata (.json)</li>
+                  <li>• Both files must be from the same Telegram account</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+              disabled={uploading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center justify-center gap-2"
+              disabled={uploading}
+            >
+              {uploading ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4" />
+              )}
+              {uploading ? 'Uploading...' : 'Upload Account'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 // =================== SUBSCRIPTION MANAGEMENT COMPONENT ===================
 
 const SubscriptionManager = () => {
