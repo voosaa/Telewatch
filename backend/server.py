@@ -3581,6 +3581,9 @@ async def get_account_status(
 
 # ================== ENHANCED STARTUP EVENT HANDLERS ==================
 
+# Include the router in the main app after all routes are defined
+app.include_router(api_router)
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
