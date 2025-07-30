@@ -70,8 +70,24 @@ const TelegramRegister = ({ onSwitchToLogin }) => {
     }, 1000);
 
     return () => {
-      // Clean up
+      // Clean up timer
       clearTimeout(initTimer);
+      
+      // Clean up DOM elements created by external script (React 19 compatible)
+      if (widgetRef.current) {
+        // Call any stored cleanup functions
+        if (widgetRef.current._telegramCleanup) {
+          widgetRef.current._telegramCleanup();
+          delete widgetRef.current._telegramCleanup;
+        }
+        
+        // Instead of innerHTML = '', remove child nodes properly
+        while (widgetRef.current.firstChild) {
+          widgetRef.current.removeChild(widgetRef.current.firstChild);
+        }
+      }
+      
+      // Clean up global callbacks
       if (window.onTelegramAuthRegister) {
         delete window.onTelegramAuthRegister;
       }
