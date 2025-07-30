@@ -2402,6 +2402,8 @@ class UserAccountManager:
     
     async def process_user_account_message(self, account_id: str, event, is_edit=False):
         """Process messages from user accounts (replaces bot message processing)"""
+        start_time = datetime.now(timezone.utc)
+        
         try:
             message = event.message
             chat = await event.get_chat()
@@ -2469,15 +2471,22 @@ class UserAccountManager:
                     group_name=message_data['group_name'],
                     user_id=message_data['user_id'],
                     username=message_data['username'],
-                    user_full_name=f"{message_data['first_name']} {message_data['last_name']}".strip(),
+                    first_name=message_data['first_name'],
+                    last_name=message_data['last_name'],
                     message_text=message_data['message_text'],
-                    message_type=message_data['media_type'] or 'text',
-                    timestamp=message_data['message_date'],
+                    message_date=message_data['message_date'],
                     tenant_id=organization_id,
-                    matched_keywords=[]
+                    created_by=account_doc['created_by'],
+                    media_type=message_data['media_type'],
+                    file_path=message_data['file_path'],
+                    detected_by_account=account_id,
+                    is_edited=is_edit
                 )
                 
                 await db.message_logs.insert_one(message_log.dict())
+                
+                # Process forwarding with load balancing
+                await self.process_message_forwarding_with_load_balancing(message_data, organization_id, account_id)
                 
                 # Update account activity
                 await db.accounts.update_one(
@@ -2489,6 +2498,11 @@ class UserAccountManager:
                         }
                     }
                 )
+            
+            # Record processing performance
+            end_time = datetime.now(timezone.utc)
+            processing_time = (end_time - start_time).total_seconds()
+            load_balancer.record_message_processed(account_id, processing_time)
             
         except Exception as e:
             logger.error(f"Error processing message from account {account_id}: {e}")
