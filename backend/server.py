@@ -4017,27 +4017,36 @@ async def get_account_status(
         logger.error(f"Error getting account status: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get account status: {str(e)}")
 
-# ================== CRYPTOCURRENCY PAYMENT SYSTEM (COINBASE COMMERCE) ==================
+# ================== CRYPTOCURRENCY PAYMENT SYSTEM (NOWPAYMENTS) ==================
 
 class CryptoChargeRequest(BaseModel):
     plan: str  # "pro" or "enterprise"
+    pay_currency: str = "btc"  # Default to BTC, can be btc, eth, usdt, usdc, sol
 
 class CryptoChargeResponse(BaseModel):
-    hosted_url: str
-    charge_id: str
+    payment_url: str
+    payment_id: str
     amount: str
     plan: str
+    pay_currency: str
+    pay_address: str
+    pay_amount: float
 
 @api_router.post("/crypto/create-charge", response_model=CryptoChargeResponse)
 async def create_crypto_charge(
     charge_request: CryptoChargeRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Create cryptocurrency payment charge via Coinbase Commerce"""
+    """Create cryptocurrency payment charge via NOWPayments"""
     try:
         # Validate plan
         if charge_request.plan not in ["pro", "enterprise"]:
             raise HTTPException(status_code=400, detail="Invalid plan. Must be 'pro' or 'enterprise'")
+        
+        # Validate cryptocurrency
+        supported_currencies = ["btc", "eth", "usdt", "usdc", "sol"]
+        if charge_request.pay_currency.lower() not in supported_currencies:
+            raise HTTPException(status_code=400, detail=f"Unsupported cryptocurrency. Supported: {supported_currencies}")
         
         # Get plan pricing
         subscription_plans = json.loads(os.environ.get('SUBSCRIPTION_PLANS', '{"pro": 9.99, "enterprise": 19.99}'))
@@ -4055,126 +4064,161 @@ async def create_crypto_charge(
         if plan_hierarchy.get(current_plan, 0) >= plan_hierarchy.get(charge_request.plan, 0):
             raise HTTPException(status_code=400, detail=f"You already have {current_plan} plan or higher")
         
-        # Get Coinbase Commerce API key
-        coinbase_api_key = os.environ.get('COINBASE_API_KEY')
-        if not coinbase_api_key or coinbase_api_key == "your_coinbase_commerce_api_key_here":
+        # Get NOWPayments API key
+        nowpayments_api_key = os.environ.get('NOWPAYMENTS_API_KEY')
+        if not nowpayments_api_key or nowpayments_api_key == "your_nowpayments_api_key_here":
             raise HTTPException(status_code=503, detail="Cryptocurrency payments are not configured yet. Please contact support.")
         
-        # Prepare charge data for Coinbase Commerce
+        # Generate unique order ID
+        order_id = f"{current_user['organization_id']}_{charge_request.plan}_{int(datetime.utcnow().timestamp())}"
+        
+        # Prepare payment data for NOWPayments
         api_headers = {
-            "X-CC-Api-Key": coinbase_api_key,
-            "Content-Type": "application/json",
-            "X-CC-Version": "2018-03-22"
+            "x-api-key": nowpayments_api_key,
+            "Content-Type": "application/json"
         }
         
-        charge_data = {
-            "name": f"Telegram Monitor {charge_request.plan.capitalize()} Plan",
-            "description": f"Upgrade to {charge_request.plan.capitalize()} Plan - Multi-Account Session Monitoring",
-            "local_price": {
-                "amount": str(plan_price),
-                "currency": "USD"
+        # Get estimated payment amount in crypto
+        estimate_response = requests.get(
+            "https://api.nowpayments.io/v1/estimate",
+            params={
+                "amount": plan_price,
+                "currency_from": "usd",
+                "currency_to": charge_request.pay_currency.lower()
             },
-            "pricing_type": "fixed_price",
-            "metadata": {
-                "user_id": current_user["id"],
-                "organization_id": current_user["organization_id"],
-                "plan": charge_request.plan,
-                "current_plan": current_plan
-            }
+            headers=api_headers,
+            timeout=30
+        )
+        
+        if estimate_response.status_code != 200:
+            logger.error(f"NOWPayments estimate API Error: {estimate_response.status_code} - {estimate_response.text}")
+            raise HTTPException(status_code=502, detail="Failed to estimate payment amount. Please try again.")
+        
+        estimate_data = estimate_response.json()
+        estimated_amount = float(estimate_data.get("estimated_amount", 0))
+        
+        # Create payment via NOWPayments API
+        payment_data = {
+            "price_amount": plan_price,
+            "price_currency": "usd",
+            "pay_currency": charge_request.pay_currency.lower(),
+            "order_id": order_id,
+            "order_description": f"Telegram Monitor {charge_request.plan.capitalize()} Plan Upgrade",
+            "ipn_callback_url": f"{os.environ.get('BACKEND_URL', 'http://localhost:8001')}/api/crypto/ipn",
+            "success_url": f"{os.environ.get('FRONTEND_URL', 'http://localhost:3000')}/subscription?status=success",
+            "cancel_url": f"{os.environ.get('FRONTEND_URL', 'http://localhost:3000')}/subscription?status=cancelled"
         }
         
-        # Create charge via Coinbase Commerce API
         response = requests.post(
-            "https://api.commerce.coinbase.com/charges",
+            "https://api.nowpayments.io/v1/payment",
             headers=api_headers,
-            json=charge_data,
+            json=payment_data,
             timeout=30
         )
         
         if response.status_code != 201:
-            logger.error(f"Coinbase Commerce API Error: {response.status_code} - {response.text}")
-            raise HTTPException(status_code=502, detail="Failed to create payment charge. Please try again.")
+            logger.error(f"NOWPayments API Error: {response.status_code} - {response.text}")
+            raise HTTPException(status_code=502, detail="Failed to create payment. Please try again.")
         
-        charge_response = response.json()
-        charge_data_response = charge_response.get("data", {})
+        payment_response = response.json()
         
         # Store pending charge in database
         pending_charge = {
             "id": str(uuid.uuid4()),
-            "charge_id": charge_data_response.get("id"),
+            "payment_id": payment_response.get("payment_id"),
+            "order_id": order_id,
             "user_id": current_user["id"],
             "organization_id": current_user["organization_id"],
             "plan": charge_request.plan,
-            "amount": str(plan_price),
-            "currency": "USD",
-            "status": "pending",
+            "price_amount": str(plan_price),
+            "price_currency": "USD",
+            "pay_currency": charge_request.pay_currency.lower(),
+            "pay_amount": estimated_amount,
+            "pay_address": payment_response.get("pay_address"),
+            "status": "waiting",
             "created_at": datetime.utcnow(),
-            "expires_at": datetime.utcnow() + timedelta(hours=1),  # Charges expire in 1 hour
-            "hosted_url": charge_data_response.get("hosted_url"),
-            "coinbase_response": charge_data_response
+            "expires_at": datetime.utcnow() + timedelta(hours=2),  # NOWPayments default expiry
+            "payment_url": payment_response.get("payment_url"),
+            "nowpayments_response": payment_response
         }
         
         await db.crypto_charges.insert_one(pending_charge)
         
         # Log the charge creation
-        logger.info(f"Created crypto charge {charge_data_response.get('id')} for user {current_user['id']} - {charge_request.plan} plan (${plan_price})")
+        logger.info(f"Created NOWPayments charge {payment_response.get('payment_id')} for user {current_user['id']} - {charge_request.plan} plan (${plan_price}) - {charge_request.pay_currency.upper()}")
         
         return CryptoChargeResponse(
-            hosted_url=charge_data_response.get("hosted_url"),
-            charge_id=charge_data_response.get("id"),
+            payment_url=payment_response.get("payment_url"),
+            payment_id=payment_response.get("payment_id"),
             amount=str(plan_price),
-            plan=charge_request.plan
+            plan=charge_request.plan,
+            pay_currency=charge_request.pay_currency.lower(),
+            pay_address=payment_response.get("pay_address"),
+            pay_amount=estimated_amount
         )
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error creating crypto charge: {e}")
+        logger.error(f"Error creating NOWPayments charge: {e}")
         raise HTTPException(status_code=500, detail="Failed to create payment charge")
 
-@api_router.post("/crypto/webhook")
-async def handle_crypto_webhook(request: Request):
-    """Handle Coinbase Commerce webhook notifications"""
+@api_router.post("/crypto/ipn")
+async def handle_crypto_ipn(request: Request):
+    """Handle NOWPayments IPN (Instant Payment Notifications)"""
     try:
-        # Get webhook secret
-        webhook_secret = os.environ.get('COINBASE_WEBHOOK_SECRET')
-        if not webhook_secret or webhook_secret == "your_coinbase_webhook_secret_here":
-            logger.error("Coinbase webhook secret not configured")
-            return JSONResponse(status_code=503, content={"error": "Webhook not configured"})
+        # Get IPN secret
+        ipn_secret = os.environ.get('NOWPAYMENTS_IPN_SECRET')
+        if not ipn_secret or ipn_secret == "your_nowpayments_ipn_secret_here":
+            logger.error("NOWPayments IPN secret not configured")
+            return JSONResponse(status_code=503, content={"error": "IPN not configured"})
         
         # Get request body and signature
         body = await request.body()
-        signature = request.headers.get("X-CC-Webhook-Signature", "")
+        signature = request.headers.get("x-nowpayments-sig", "")
         
-        # Verify webhook signature
+        # Parse IPN payload
+        try:
+            payload = json.loads(body.decode('utf-8'))
+        except json.JSONDecodeError:
+            logger.warning("Invalid JSON in IPN payload")
+            return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+        
+        # Verify IPN signature
+        sorted_payload = dict(sorted(payload.items()))
+        query_string = "&".join([f"{k}={v}" for k, v in sorted_payload.items()])
+        
         expected_signature = hmac.new(
-            webhook_secret.encode('utf-8'),
-            body,
+            ipn_secret.encode('utf-8'),
+            query_string.encode('utf-8'),
             hashlib.sha256
         ).hexdigest()
         
         if not hmac.compare_digest(signature, expected_signature):
-            logger.warning("Invalid webhook signature received")
+            logger.warning("Invalid IPN signature received")
             return JSONResponse(status_code=403, content={"error": "Invalid signature"})
         
-        # Parse webhook payload
-        payload = json.loads(body.decode('utf-8'))
-        event_type = payload.get("event", {}).get("type")
-        event_data = payload.get("event", {}).get("data", {})
+        # Extract payment data
+        payment_id = payload.get("payment_id")
+        payment_status = payload.get("payment_status")
+        order_id = payload.get("order_id")
         
-        logger.info(f"Received Coinbase webhook: {event_type}")
+        logger.info(f"Received NOWPayments IPN: {payment_id} - {payment_status}")
         
-        # Handle charge confirmation
-        if event_type == "charge:confirmed":
-            charge_id = event_data.get("id")
-            
-            # Find pending charge in database
-            pending_charge = await db.crypto_charges.find_one({"charge_id": charge_id})
-            
-            if not pending_charge:
-                logger.warning(f"No pending charge found for {charge_id}")
-                return JSONResponse(status_code=404, content={"error": "Charge not found"})
-            
+        # Find pending charge in database
+        pending_charge = await db.crypto_charges.find_one({
+            "$or": [
+                {"payment_id": payment_id},
+                {"order_id": order_id}
+            ]
+        })
+        
+        if not pending_charge:
+            logger.warning(f"No pending charge found for payment {payment_id} / order {order_id}")
+            return JSONResponse(status_code=404, content={"error": "Payment not found"})
+        
+        # Handle payment confirmation
+        if payment_status in ["confirmed", "finished"]:
             # Update organization plan
             await db.organizations.update_one(
                 {"id": pending_charge["organization_id"]},
@@ -4182,7 +4226,7 @@ async def handle_crypto_webhook(request: Request):
                     "$set": {
                         "plan": pending_charge["plan"],
                         "updated_at": datetime.utcnow(),
-                        "payment_method": "cryptocurrency",
+                        "payment_method": "cryptocurrency_nowpayments",
                         "last_payment_date": datetime.utcnow()
                     }
                 }
@@ -4190,49 +4234,60 @@ async def handle_crypto_webhook(request: Request):
             
             # Update charge status
             await db.crypto_charges.update_one(
-                {"charge_id": charge_id},
+                {"payment_id": payment_id},
                 {
                     "$set": {
-                        "status": "confirmed",
+                        "status": payment_status,
                         "confirmed_at": datetime.utcnow(),
-                        "payment_data": event_data
+                        "ipn_data": payload
                     }
                 }
             )
             
             # Log successful payment
-            logger.info(f"✅ Payment confirmed: User {pending_charge['user_id']} upgraded to {pending_charge['plan']} plan (${pending_charge['amount']})")
+            logger.info(f"✅ NOWPayments confirmed: User {pending_charge['user_id']} upgraded to {pending_charge['plan']} plan (${pending_charge['price_amount']}) via {pending_charge['pay_currency'].upper()}")
             
             return JSONResponse(status_code=200, content={"message": "Payment processed successfully"})
         
-        # Handle charge failure
-        elif event_type == "charge:failed":
-            charge_id = event_data.get("id")
-            
+        # Handle payment failure or other statuses
+        elif payment_status in ["failed", "refunded", "expired"]:
             # Update charge status
             await db.crypto_charges.update_one(
-                {"charge_id": charge_id},
+                {"payment_id": payment_id},
                 {
                     "$set": {
-                        "status": "failed",
+                        "status": payment_status,
                         "failed_at": datetime.utcnow(),
-                        "failure_data": event_data
+                        "ipn_data": payload
                     }
                 }
             )
             
-            logger.warning(f"❌ Payment failed: Charge {charge_id}")
+            logger.warning(f"❌ NOWPayments failed: Payment {payment_id} - {payment_status}")
             
             return JSONResponse(status_code=200, content={"message": "Payment failure recorded"})
         
-        # Handle other events
+        # Handle partial payments or waiting status
         else:
-            logger.info(f"Unhandled webhook event: {event_type}")
-            return JSONResponse(status_code=200, content={"message": "Event acknowledged"})
+            # Update charge with current status
+            await db.crypto_charges.update_one(
+                {"payment_id": payment_id},
+                {
+                    "$set": {
+                        "status": payment_status,
+                        "last_update": datetime.utcnow(),
+                        "ipn_data": payload
+                    }
+                }
+            )
+            
+            logger.info(f"📊 NOWPayments status update: Payment {payment_id} - {payment_status}")
+            
+            return JSONResponse(status_code=200, content={"message": "Status updated"})
         
     except Exception as e:
-        logger.error(f"Error handling crypto webhook: {e}")
-        return JSONResponse(status_code=500, content={"error": "Webhook processing failed"})
+        logger.error(f"Error handling NOWPayments IPN: {e}")
+        return JSONResponse(status_code=500, content={"error": "IPN processing failed"})
 
 @api_router.get("/crypto/charges")
 async def get_crypto_charges(current_user: dict = Depends(get_current_user)):
@@ -4244,8 +4299,8 @@ async def get_crypto_charges(current_user: dict = Depends(get_current_user)):
         
         # Clean up sensitive data
         for charge in charges:
-            charge.pop("coinbase_response", None)
-            charge.pop("payment_data", None)
+            charge.pop("nowpayments_response", None)
+            charge.pop("ipn_data", None)
             charge["_id"] = str(charge["_id"])
         
         return {"charges": charges}
@@ -4253,6 +4308,70 @@ async def get_crypto_charges(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         logger.error(f"Error getting crypto charges: {e}")
         raise HTTPException(status_code=500, detail="Failed to get payment history")
+
+@api_router.get("/crypto/currencies")
+async def get_supported_currencies():
+    """Get list of supported cryptocurrencies"""
+    try:
+        # Get NOWPayments API key
+        nowpayments_api_key = os.environ.get('NOWPAYMENTS_API_KEY')
+        if not nowpayments_api_key or nowpayments_api_key == "your_nowpayments_api_key_here":
+            # Return default supported currencies if API not configured
+            return {
+                "currencies": [
+                    {"currency": "btc", "name": "Bitcoin", "network": "BTC"},
+                    {"currency": "eth", "name": "Ethereum", "network": "ETH"},
+                    {"currency": "usdt", "name": "Tether", "network": "ETH"},
+                    {"currency": "usdc", "name": "USD Coin", "network": "ETH"},
+                    {"currency": "sol", "name": "Solana", "network": "SOL"}
+                ]
+            }
+        
+        # Fetch available currencies from NOWPayments
+        api_headers = {
+            "x-api-key": nowpayments_api_key,
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.get(
+            "https://api.nowpayments.io/v1/currencies",
+            headers=api_headers,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            all_currencies = response.json().get("currencies", [])
+            # Filter to our supported cryptocurrencies
+            supported = ["btc", "eth", "usdt", "usdc", "sol"]
+            filtered_currencies = [
+                {"currency": curr.lower(), "name": curr.upper(), "network": curr.upper()}
+                for curr in all_currencies if curr.lower() in supported
+            ]
+            return {"currencies": filtered_currencies}
+        else:
+            # Fallback to default list
+            return {
+                "currencies": [
+                    {"currency": "btc", "name": "Bitcoin", "network": "BTC"},
+                    {"currency": "eth", "name": "Ethereum", "network": "ETH"},
+                    {"currency": "usdt", "name": "Tether", "network": "ETH"},
+                    {"currency": "usdc", "name": "USD Coin", "network": "ETH"},
+                    {"currency": "sol", "name": "Solana", "network": "SOL"}
+                ]
+            }
+        
+    except Exception as e:
+        logger.error(f"Error getting supported currencies: {e}")
+        # Return default currencies on error
+        return {
+            "currencies": [
+                {"currency": "btc", "name": "Bitcoin", "network": "BTC"},
+                {"currency": "eth", "name": "Ethereum", "network": "ETH"},
+                {"currency": "usdt", "name": "Tether", "network": "ETH"},
+                {"currency": "usdc", "name": "USD Coin", "network": "ETH"},
+                {"currency": "sol", "name": "Solana", "network": "SOL"}
+            ]
+        }
 
 # ================== ENHANCED STARTUP EVENT HANDLERS ==================
 
