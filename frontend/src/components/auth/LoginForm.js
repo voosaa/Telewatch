@@ -1,77 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { AlertCircle, Bot } from 'lucide-react';
-
-const TelegramLoginWidget = ({ botName, onAuth }) => {
-  useEffect(() => {
-    // Create script element for Telegram Login Widget
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', botName);
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-radius', '8');
-    script.setAttribute('data-request-access', 'write');
-    script.setAttribute('data-userpic', 'false');
-    script.async = true;
-    
-    // Create callback function
-    window.onTelegramAuth = onAuth;
-    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-    
-    // Add script to page
-    const container = document.getElementById('telegram-login-container');
-    if (container) {
-      container.appendChild(script);
-    }
-    
-    // Cleanup
-    return () => {
-      if (container) {
-        container.innerHTML = '';
-      }
-      delete window.onTelegramAuth;
-    };
-  }, [botName, onAuth]);
-  
-  return <div id="telegram-login-container"></div>;
-};
+import { AlertCircle, Bot, ExternalLink, MessageCircle } from 'lucide-react';
 
 const TelegramLogin = ({ onSwitchToRegister }) => {
   const { telegramLogin } = useAuth();
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
 
-  const handleTelegramResponse = async (user) => {
-    setIsLoading(true);
-    setError('');
-    
-    try {
-      const result = await telegramLogin({
-        id: user.id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        username: user.username,
-        photo_url: user.photo_url,
-        auth_date: user.auth_date,
-        hash: user.hash
-      });
-      
-      if (!result.success) {
-        if (result.error.includes('User not found')) {
-          setError('Account not found. Please register first.');
-        } else {
-          setError(result.error);
-        }
-      }
-    } catch (err) {
-      setError('Authentication failed. Please try again.');
-    }
-    
-    setIsLoading(false);
+  const botUsername = 'Telewatch_test_bot';
+  const botUrl = `https://t.me/${botUsername}`;
+
+  const handleBotLogin = async () => {
+    setError('For development purposes, please use the registration flow or contact support for access.');
+    setShowInstructions(true);
   };
-
-  // Bot username (without @)
-  const botName = 'Telewatch_test_bot';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -81,9 +24,12 @@ const TelegramLogin = ({ onSwitchToRegister }) => {
             <Bot className="h-6 w-6 text-white" />
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in with Telegram
+            Welcome to Telegram Monitor
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
+            Multi-Account Session Monitoring System
+          </p>
+          <p className="mt-1 text-center text-sm text-gray-600">
             Don't have an account?{' '}
             <button
               onClick={onSwitchToRegister}
@@ -105,33 +51,54 @@ const TelegramLogin = ({ onSwitchToRegister }) => {
           <div className="bg-white p-6 rounded-lg shadow-md">
             <div className="text-center mb-6">
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Authenticate with Telegram
+                Authentication Options
               </h3>
               <p className="text-sm text-gray-600">
-                Click the button below to sign in using your Telegram account.
-                This is secure and we don't store your password.
+                Choose how you'd like to access the monitoring system.
               </p>
             </div>
             
-            <div className="flex justify-center">
-              {isLoading ? (
-                <div className="flex items-center justify-center py-3 px-6 bg-gray-100 rounded-lg">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
-                  <span className="text-gray-600">Authenticating...</span>
+            <div className="space-y-4">
+              {/* Telegram Bot Option */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <MessageCircle className="h-5 w-5 text-blue-600" />
+                  <h4 className="font-medium text-gray-900">Via Telegram Bot</h4>
                 </div>
-              ) : (
-                <TelegramLoginWidget 
-                  botName={botName}
-                  onAuth={handleTelegramResponse}
-                />
-              )}
-            </div>
-            
-            <div className="mt-4 text-xs text-gray-500 text-center">
-              By signing in, you agree to our Terms of Service and Privacy Policy
+                <p className="text-sm text-gray-600 mb-3">
+                  Interact with the monitoring system directly through our Telegram bot.
+                </p>
+                <a
+                  href={botUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open @{botUsername}
+                </a>
+              </div>
+              
+              {/* Web Interface Option */}
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <Bot className="h-5 w-5 text-green-600" />
+                  <h4 className="font-medium text-gray-900">Register for Web Access</h4>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">
+                  Create an account to access the full web dashboard with all monitoring features.
+                </p>
+                <button
+                  onClick={onSwitchToRegister}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                >
+                  Create Account
+                </button>
+              </div>
             </div>
           </div>
 
+          {/* System Features */}
           <div className="bg-blue-50 p-4 rounded-lg">
             <div className="flex items-start">
               <div className="flex-shrink-0">
@@ -139,18 +106,40 @@ const TelegramLogin = ({ onSwitchToRegister }) => {
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-blue-800">
-                  Why Telegram Authentication?
+                  System Features
                 </h3>
                 <div className="mt-2 text-sm text-blue-700">
                   <ul className="list-disc pl-4 space-y-1">
-                    <li>Secure authentication using Telegram's infrastructure</li>
-                    <li>No need to remember another password</li>
-                    <li>Seamless integration with your Telegram bot monitoring</li>
+                    <li>Multi-account session-based monitoring</li>
+                    <li>Stealth group monitoring without bot detection</li>
+                    <li>Advanced message filtering and forwarding</li>
+                    <li>Real-time analytics and health monitoring</li>
+                    <li>Professional web dashboard and Telegram bot interface</li>
                   </ul>
                 </div>
               </div>
             </div>
           </div>
+
+          {showInstructions && (
+            <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+              <h4 className="font-medium text-yellow-900 mb-2">Getting Started Instructions</h4>
+              <div className="text-sm text-yellow-800 space-y-2">
+                <p><strong>Option 1 - Telegram Bot:</strong></p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>Click "Open @{botUsername}" above</li>
+                  <li>Send /start to the bot</li>
+                  <li>Follow the bot's instructions</li>
+                </ol>
+                <p><strong>Option 2 - Web Registration:</strong></p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>Click "Create Account" above</li>
+                  <li>Follow the registration process</li>
+                  <li>Upload your account session files</li>
+                </ol>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
