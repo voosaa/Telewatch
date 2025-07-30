@@ -6,7 +6,6 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import OrganizationSettings from "./components/organization/OrganizationSettings";
 import UserManagement from "./components/organization/UserManagement";
 import SubscriptionManager from "./components/subscription/SubscriptionManager";
-import AccountManager from "./components/account/AccountManager";
 import axios from "axios";
 import { 
   Activity, 
