@@ -52,6 +52,7 @@ class TelegramBotAPITester:
         }
         self.auth_token = None
         self.test_user_data = None
+        self.telegram_bot_token = "8342094196:AAE-E8jIYLjYflUPtY0G02NLbogbDpN_FE8"  # From backend .env
 
     def log_test(self, test_name: str, success: bool, details: str = "", response_data: Any = None):
         """Log test results"""
