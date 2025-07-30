@@ -1,54 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useAuth } from '../../contexts/AuthContext';
-import { UserPlus, AlertCircle, Building, Bot, Check } from 'lucide-react';
-
-const TelegramLoginWidget = ({ botName, onAuth }) => {
-  useEffect(() => {
-    // Create script element for Telegram Login Widget
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', botName);
-    script.setAttribute('data-size', 'large');
-    script.setAttribute('data-radius', '8');
-    script.setAttribute('data-request-access', 'write');
-    script.setAttribute('data-userpic', 'false');
-    script.async = true;
-    
-    // Create callback function
-    window.onTelegramAuth = onAuth;
-    script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-    
-    // Add script to page
-    const container = document.getElementById('telegram-register-container');
-    if (container) {
-      container.appendChild(script);
-    }
-    
-    // Cleanup
-    return () => {
-      if (container) {
-        container.innerHTML = '';
-      }
-      delete window.onTelegramAuth;
-    };
-  }, [botName, onAuth]);
-  
-  return <div id="telegram-register-container"></div>;
-};
+import { UserPlus, AlertCircle, Building, Bot, Check, ExternalLink, MessageCircle } from 'lucide-react';
 
 const schema = yup.object({
-  organizationName: yup.string().required('Organization name is required')
+  organizationName: yup.string().required('Organization name is required'),
+  telegramId: yup.string().required('Telegram ID is required'),
+  firstName: yup.string().required('First name is required'),
+  username: yup.string()
 });
 
 const TelegramRegister = ({ onSwitchToLogin }) => {
   const { telegramRegister } = useAuth();
-  const [showOrgForm, setShowOrgForm] = useState(false);
-  const [telegramData, setTelegramData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showManualForm, setShowManualForm] = useState(false);
 
   const {
     register,
@@ -58,35 +26,27 @@ const TelegramRegister = ({ onSwitchToLogin }) => {
     resolver: yupResolver(schema)
   });
 
-  const handleTelegramResponse = (user) => {
-    setTelegramData({
-      id: user.id,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      username: user.username,
-      photo_url: user.photo_url,
-      auth_date: user.auth_date,
-      hash: user.hash
-    });
-    setShowOrgForm(true);
-    setError('');
-  };
+  const botUsername = 'Telewatch_test_bot';
+  const botUrl = `https://t.me/${botUsername}`;
 
   const onSubmit = async (data) => {
-    if (!telegramData) {
-      setError('Please authenticate with Telegram first');
-      return;
-    }
-
     setIsLoading(true);
     setError('');
 
+    // Convert telegram_id to number
+    const telegramId = parseInt(data.telegramId);
+    if (isNaN(telegramId)) {
+      setError('Telegram ID must be a number');
+      setIsLoading(false);
+      return;
+    }
+
     const result = await telegramRegister({
-      telegram_id: telegramData.id,
-      username: telegramData.username,
-      first_name: telegramData.first_name,
-      last_name: telegramData.last_name,
-      photo_url: telegramData.photo_url,
+      telegram_id: telegramId,
+      username: data.username || null,
+      first_name: data.firstName,
+      last_name: data.lastName || null,
+      photo_url: null,
       organization_name: data.organizationName
     });
     
@@ -97,14 +57,9 @@ const TelegramRegister = ({ onSwitchToLogin }) => {
     setIsLoading(false);
   };
 
-  const resetForm = () => {
-    setShowOrgForm(false);
-    setTelegramData(null);
-    setError('');
+  const handleGetTelegramId = () => {
+    setError('To get your Telegram ID, send /start to our bot and it will display your user information.');
   };
-
-  // Bot username (without @)
-  const botName = 'Telewatch_test_bot';
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -135,71 +90,70 @@ const TelegramRegister = ({ onSwitchToLogin }) => {
             </div>
           )}
 
-          {!showOrgForm ? (
-            // Step 1: Telegram Authentication
+          {!showManualForm ? (
+            // Registration Options
             <div className="bg-white p-6 rounded-lg shadow-md">
               <div className="text-center mb-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Step 1: Authenticate with Telegram
+                  Registration Options
                 </h3>
                 <p className="text-sm text-gray-600">
-                  First, we need to verify your Telegram account. Click the button below to continue.
+                  Choose how you'd like to create your account.
                 </p>
               </div>
               
-              <div className="flex justify-center">
-                <TelegramLoginWidget 
-                  botName={botName}
-                  onAuth={handleTelegramResponse}
-                />
-              </div>
-              
-              <div className="mt-4 text-xs text-gray-500 text-center">
-                We use Telegram for secure authentication and seamless integration
+              <div className="space-y-4">
+                {/* Bot Registration Option */}
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <MessageCircle className="h-5 w-5 text-blue-600" />
+                    <h4 className="font-medium text-gray-900">Register via Telegram Bot</h4>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-3">
+                    The easiest way - let our bot guide you through the registration process.
+                  </p>
+                  <a
+                    href={botUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Open @{botUsername}
+                  </a>
+                </div>
+                
+                {/* Manual Registration Option */}
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <UserPlus className="h-5 w-5 text-green-600" />
+                    <h4 className="font-medium text-gray-900">Manual Registration</h4>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Fill out the registration form manually if you prefer.
+                  </p>
+                  <button
+                    onClick={() => setShowManualForm(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                  >
+                    Continue with Manual Form
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
-            // Step 2: Organization Setup
+            // Manual Registration Form
             <div className="bg-white p-6 rounded-lg shadow-md">
-              {/* Telegram User Info */}
-              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center gap-3 mb-2">
-                  <Check className="h-5 w-5 text-green-600" />
-                  <span className="font-medium text-green-900">Telegram Account Verified</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  {telegramData?.photo_url && (
-                    <img 
-                      src={telegramData.photo_url} 
-                      alt="Profile" 
-                      className="w-8 h-8 rounded-full"
-                    />
-                  )}
-                  <div className="text-sm text-green-800">
-                    <div className="font-medium">
-                      {telegramData?.first_name} {telegramData?.last_name}
-                    </div>
-                    {telegramData?.username && (
-                      <div className="text-green-600">@{telegramData.username}</div>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={resetForm}
-                  className="mt-2 text-xs text-green-700 hover:text-green-800 underline"
-                >
-                  Use different account
-                </button>
-              </div>
-
-              {/* Organization Form */}
-              <div className="text-center mb-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Step 2: Create Organization
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Manual Registration
                 </h3>
-                <p className="text-sm text-gray-600">
-                  Set up your organization workspace for team collaboration.
-                </p>
+                <button
+                  onClick={() => setShowManualForm(false)}
+                  className="text-sm text-gray-600 hover:text-gray-800"
+                >
+                  ← Back to options
+                </button>
               </div>
 
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -213,11 +167,79 @@ const TelegramRegister = ({ onSwitchToLogin }) => {
                     type="text"
                     className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
                     placeholder="Enter your organization name"
+                    disabled={isLoading}
                   />
                   {errors.organizationName && (
                     <p className="mt-1 text-sm text-red-600">{errors.organizationName.message}</p>
                   )}
-                  <p className="mt-1 text-xs text-gray-500">This will be your organization's workspace</p>
+                </div>
+
+                <div>
+                  <label htmlFor="telegramId" className="block text-sm font-medium text-gray-700">
+                    Telegram ID *
+                  </label>
+                  <input
+                    {...register('telegramId')}
+                    type="text"
+                    className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
+                    placeholder="Your Telegram user ID (numbers only)"
+                    disabled={isLoading}
+                  />
+                  {errors.telegramId && (
+                    <p className="mt-1 text-sm text-red-600">{errors.telegramId.message}</p>
+                  )}
+                  <div className="mt-1 text-xs text-gray-500">
+                    Don't know your ID?{' '}
+                    <button
+                      type="button"
+                      onClick={handleGetTelegramId}
+                      className="text-blue-600 hover:text-blue-700 underline"
+                    >
+                      Get help
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
+                    First Name
+                  </label>
+                  <input
+                    {...register('firstName')}
+                    type="text"
+                    className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
+                    placeholder="Your first name"
+                    disabled={isLoading}
+                  />
+                  {errors.firstName && (
+                    <p className="mt-1 text-sm text-red-600">{errors.firstName.message}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
+                    Last Name (Optional)
+                  </label>
+                  <input
+                    {...register('lastName')}
+                    type="text"
+                    className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
+                    placeholder="Your last name"
+                    disabled={isLoading}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                    Telegram Username (Optional)
+                  </label>
+                  <input
+                    {...register('username')}
+                    type="text"
+                    className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-green-500 focus:border-green-500 focus:z-10 sm:text-sm"
+                    placeholder="@username (without @)"
+                    disabled={isLoading}
+                  />
                 </div>
 
                 <button
@@ -232,10 +254,6 @@ const TelegramRegister = ({ onSwitchToLogin }) => {
                   )}
                 </button>
               </form>
-
-              <div className="mt-4 text-xs text-gray-500 text-center">
-                By creating an account, you agree to our Terms of Service and Privacy Policy
-              </div>
             </div>
           )}
 
@@ -247,15 +265,16 @@ const TelegramRegister = ({ onSwitchToLogin }) => {
               </div>
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-blue-800">
-                  Why Telegram Authentication?
+                  Getting Started Steps
                 </h3>
                 <div className="mt-2 text-sm text-blue-700">
-                  <ul className="list-disc pl-4 space-y-1">
-                    <li>Secure and verified identity through Telegram</li>
-                    <li>Seamless integration with bot monitoring features</li>
-                    <li>No passwords to remember or manage</li>
-                    <li>Quick setup for team collaboration</li>
-                  </ul>
+                  <ol className="list-decimal pl-4 space-y-1">
+                    <li>Create your account (via bot or manual form)</li>
+                    <li>Upload your Telegram session + JSON files</li>
+                    <li>Activate accounts for monitoring</li>
+                    <li>Configure groups and watchlists</li>
+                    <li>Start monitoring with stealth user accounts</li>
+                  </ol>
                 </div>
               </div>
             </div>
