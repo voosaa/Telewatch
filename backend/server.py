@@ -1535,14 +1535,75 @@ async def set_webhook():
 
 # ================== AUTHENTICATION ROUTES ==================
 
+@api_router.post("/auth/telegram", response_model=TokenResponse)
+async def telegram_auth(auth_data: TelegramAuthData):
+    """Authenticate user with Telegram Login Widget"""
+    try:
+        # Verify Telegram authentication data
+        auth_dict = auth_data.dict()
+        if not verify_telegram_authentication(auth_dict):
+            raise HTTPException(status_code=401, detail="Invalid Telegram authentication data")
+        
+        # Check if user already exists
+        existing_user = await db.users.find_one({"telegram_id": auth_data.id})
+        
+        if existing_user:
+            # User exists, log them in
+            user = User(**existing_user)
+            
+            # Update last login and user info from Telegram
+            update_data = {
+                "last_login": datetime.now(timezone.utc),
+                "username": auth_data.username,
+                "first_name": auth_data.first_name,
+                "last_name": auth_data.last_name,
+                "photo_url": auth_data.photo_url,
+                "updated_at": datetime.now(timezone.utc)
+            }
+            
+            await db.users.update_one({"id": user.id}, {"$set": update_data})
+            
+            # Create access token
+            access_token = create_access_token(user.id, user.organization_id, user.role.value)
+            
+            # Return response with updated user data
+            user_response = UserResponse(
+                id=user.id,
+                telegram_id=user.telegram_id,
+                username=auth_data.username,
+                first_name=auth_data.first_name,
+                last_name=auth_data.last_name,
+                full_name=user.full_name,
+                photo_url=auth_data.photo_url,
+                is_active=user.is_active,
+                role=user.role,
+                organization_id=user.organization_id,
+                created_at=user.created_at,
+                last_login=datetime.now(timezone.utc)
+            )
+            
+            return TokenResponse(
+                access_token=access_token,
+                expires_in=JWT_EXPIRATION_HOURS * 3600,
+                user=user_response
+            )
+        else:
+            # New user, needs to complete registration with organization
+            raise HTTPException(status_code=404, detail="User not found. Please complete registration first.")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
+
 @api_router.post("/auth/register", response_model=TokenResponse)
-async def register_user(user_data: UserCreate):
-    """Register a new user and organization"""
+async def register_telegram_user(user_data: UserCreate):
+    """Register a new user with Telegram data and create organization"""
     try:
         # Check if user already exists
-        existing_user = await db.users.find_one({"email": user_data.email})
+        existing_user = await db.users.find_one({"telegram_id": user_data.telegram_id})
         if existing_user:
-            raise HTTPException(status_code=400, detail="User with this email already exists")
+            raise HTTPException(status_code=400, detail="User with this Telegram ID already exists")
         
         # Create organization if provided
         organization_id = None
@@ -1552,10 +1613,11 @@ async def register_user(user_data: UserCreate):
             if existing_org:
                 raise HTTPException(status_code=400, detail="Organization name already taken")
             
-            # Create new organization
+            # Create new organization  
+            full_name = user_data.last_name and f"{user_data.first_name} {user_data.last_name}" or user_data.first_name
             organization = Organization(
                 name=user_data.organization_name,
-                description=f"Organization for {user_data.full_name}"
+                description=f"Organization for {full_name}"
             )
             await db.organizations.insert_one(organization.dict())
             organization_id = organization.id
@@ -1564,9 +1626,11 @@ async def register_user(user_data: UserCreate):
         
         # Create user
         user = User(
-            email=user_data.email,
-            password_hash=hash_password(user_data.password),
-            full_name=user_data.full_name,
+            telegram_id=user_data.telegram_id,
+            username=user_data.username,
+            first_name=user_data.first_name,
+            last_name=user_data.last_name,
+            photo_url=user_data.photo_url,
             role=UserRole.OWNER,  # First user in org is owner
             organization_id=organization_id
         )
@@ -1579,8 +1643,12 @@ async def register_user(user_data: UserCreate):
         # Return response
         user_response = UserResponse(
             id=user.id,
-            email=user.email,
+            telegram_id=user.telegram_id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name,
             full_name=user.full_name,
+            photo_url=user.photo_url,
             is_active=user.is_active,
             role=user.role,
             organization_id=user.organization_id,
@@ -1594,60 +1662,14 @@ async def register_user(user_data: UserCreate):
         )
         
     except Exception as e:
-        if "already exists" in str(e) or "already taken" in str(e):
+        if "already exists" in str(e) or "already taken" in str(e) or "required" in str(e):
             raise e
         raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login_user(user_credentials: UserLogin):
-    """Login user"""
-    try:
-        # Find user
-        user_doc = await db.users.find_one({"email": user_credentials.email})
-        if not user_doc:
-            raise HTTPException(status_code=401, detail="Invalid email or password")
-        
-        user = User(**user_doc)
-        
-        # Verify password
-        if not verify_password(user_credentials.password, user.password_hash):
-            raise HTTPException(status_code=401, detail="Invalid email or password")
-        
-        # Check if user is active
-        if not user.is_active:
-            raise HTTPException(status_code=401, detail="Account is deactivated")
-        
-        # Update last login
-        await db.users.update_one(
-            {"id": user.id},
-            {"$set": {"last_login": datetime.now(timezone.utc)}}
-        )
-        
-        # Create access token
-        access_token = create_access_token(user.id, user.organization_id, user.role.value)
-        
-        # Return response
-        user_response = UserResponse(
-            id=user.id,
-            email=user.email,
-            full_name=user.full_name,
-            is_active=user.is_active,
-            role=user.role,
-            organization_id=user.organization_id,
-            created_at=user.created_at,
-            last_login=datetime.now(timezone.utc)
-        )
-        
-        return TokenResponse(
-            access_token=access_token,
-            expires_in=JWT_EXPIRATION_HOURS * 3600,
-            user=user_response
-        )
-        
-    except Exception as e:
-        if "Invalid email" in str(e) or "deactivated" in str(e):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
+    """Legacy login endpoint - deprecated in favor of Telegram auth"""
+    raise HTTPException(status_code=410, detail="Email/password login has been replaced with Telegram authentication. Please use Telegram Login Widget.")
 
 @api_router.get("/auth/me", response_model=UserResponse)
 async def get_current_user_info(current_user: Dict = Depends(get_current_active_user)):
@@ -1655,8 +1677,12 @@ async def get_current_user_info(current_user: Dict = Depends(get_current_active_
     user = current_user["user"]
     return UserResponse(
         id=user.id,
-        email=user.email,
+        telegram_id=user.telegram_id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
         full_name=user.full_name,
+        photo_url=user.photo_url,
         is_active=user.is_active,
         role=user.role,
         organization_id=user.organization_id,
