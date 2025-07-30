@@ -2226,6 +2226,552 @@ async def migrate_database_for_multitenancy():
         logger.error(f"Database migration failed: {e}")
         # Don't fail startup, but log the error
 
+# ================== TELETHON USER ACCOUNT MONITORING SYSTEM ==================
+
+from telethon import TelegramClient, events
+from telethon.sessions import StringSession
+from concurrent.futures import ThreadPoolExecutor
+
+class UserAccountManager:
+    """Manages multiple Telethon user account clients for monitoring"""
+    
+    def __init__(self):
+        self.active_clients: Dict[str, TelegramClient] = {}
+        self.client_sessions: Dict[str, dict] = {}
+        self.monitoring_tasks: Dict[str, asyncio.Task] = {}
+        self.account_groups: Dict[str, Set[int]] = {}  # account_id -> set of group IDs
+        self.executor = ThreadPoolExecutor(max_workers=10)
+        
+    async def initialize_account_client(self, account_id: str, session_file_path: str, json_file_path: str):
+        """Initialize Telethon client from uploaded session files"""
+        try:
+            # Read account metadata
+            async with aiofiles.open(json_file_path, 'r') as f:
+                content = await f.read()
+                account_data = json.loads(content)
+            
+            # Get API credentials from environment
+            api_id = int(os.environ.get('TELEGRAM_API_ID', '0'))
+            api_hash = os.environ.get('TELEGRAM_API_HASH', '')
+            
+            if not api_id or not api_hash:
+                logger.error("TELEGRAM_API_ID and TELEGRAM_API_HASH must be set in environment")
+                return False
+            
+            # Read session file
+            async with aiofiles.open(session_file_path, 'rb') as f:
+                session_data = await f.read()
+            
+            # Convert binary session to string session (if needed)
+            # For now, we'll assume the session file is compatible
+            session_name = f"account_{account_id}"
+            
+            # Create client
+            client = TelegramClient(
+                session_file_path.replace('.session', ''),
+                api_id,
+                api_hash,
+                device_model=account_data.get('device_model', 'TelegramMonitor'),
+                app_version=account_data.get('app_version', '1.0.0')
+            )
+            
+            # Connect and verify
+            await client.connect()
+            
+            if not await client.is_user_authorized():
+                logger.error(f"Account {account_id} session is not authorized")
+                await client.disconnect()
+                return False
+            
+            # Get user info
+            me = await client.get_me()
+            logger.info(f"Connected user account: {me.first_name} (@{me.username}) - ID: {me.id}")
+            
+            # Store client and metadata
+            self.active_clients[account_id] = client
+            self.client_sessions[account_id] = {
+                'account_data': account_data,
+                'user_info': {
+                    'id': me.id,
+                    'first_name': me.first_name,
+                    'last_name': me.last_name,
+                    'username': me.username,
+                    'phone': me.phone
+                }
+            }
+            
+            # Update account status in database
+            await db.accounts.update_one(
+                {"id": account_id},
+                {
+                    "$set": {
+                        "status": AccountStatus.ACTIVE.value,
+                        "last_activity": datetime.now(timezone.utc),
+                        "updated_at": datetime.now(timezone.utc),
+                        "error_message": None
+                    }
+                }
+            )
+            
+            # Discover groups this account is member of
+            await self.discover_account_groups(account_id)
+            
+            # Start monitoring
+            await self.start_account_monitoring(account_id)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize account {account_id}: {e}")
+            
+            # Update account with error status
+            await db.accounts.update_one(
+                {"id": account_id},
+                {
+                    "$set": {
+                        "status": AccountStatus.ERROR.value,
+                        "updated_at": datetime.now(timezone.utc),
+                        "error_message": str(e)
+                    }
+                }
+            )
+            return False
+    
+    async def discover_account_groups(self, account_id: str):
+        """Discover all groups this account is a member of"""
+        try:
+            client = self.active_clients.get(account_id)
+            if not client:
+                return
+            
+            group_ids = set()
+            
+            # Get all dialogs (chats)
+            async for dialog in client.iter_dialogs():
+                if dialog.is_group or dialog.is_channel:
+                    group_ids.add(dialog.id)
+                    
+                    # Check if this group is in our monitored groups
+                    existing_group = await db.groups.find_one({
+                        "group_id": str(dialog.id),
+                        "is_active": True
+                    })
+                    
+                    if not existing_group:
+                        # Auto-add discovered groups for this account's organization
+                        account_doc = await db.accounts.find_one({"id": account_id})
+                        if account_doc:
+                            group = Group(
+                                group_id=str(dialog.id),
+                                group_name=dialog.name or f"Group {dialog.id}",
+                                group_type="group",
+                                description=f"Auto-discovered from account {account_doc['name']}",
+                                tenant_id=account_doc['organization_id'],
+                                created_by=account_doc['created_by']
+                            )
+                            await db.groups.insert_one(group.dict())
+                            logger.info(f"Auto-discovered group: {dialog.name} (ID: {dialog.id})")
+            
+            self.account_groups[account_id] = group_ids
+            logger.info(f"Account {account_id} is member of {len(group_ids)} groups/channels")
+            
+        except Exception as e:
+            logger.error(f"Failed to discover groups for account {account_id}: {e}")
+    
+    async def start_account_monitoring(self, account_id: str):
+        """Start monitoring messages for this account"""
+        try:
+            client = self.active_clients.get(account_id)
+            if not client:
+                return
+            
+            # Set up event handlers for new messages
+            @client.on(events.NewMessage)
+            async def handle_new_message(event):
+                await self.process_user_account_message(account_id, event)
+            
+            # Set up event handlers for message edits
+            @client.on(events.MessageEdited)
+            async def handle_edited_message(event):
+                await self.process_user_account_message(account_id, event, is_edit=True)
+            
+            logger.info(f"Started monitoring for account {account_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to start monitoring for account {account_id}: {e}")
+    
+    async def process_user_account_message(self, account_id: str, event, is_edit=False):
+        """Process messages from user accounts (replaces bot message processing)"""
+        try:
+            message = event.message
+            chat = await event.get_chat()
+            sender = await event.get_sender()
+            
+            # Skip if not from a group/channel we're monitoring
+            if not (chat.megagroup or chat.broadcast or hasattr(chat, 'participants_count')):
+                return
+            
+            # Get account info
+            account_doc = await db.accounts.find_one({"id": account_id})
+            if not account_doc:
+                return
+            
+            organization_id = account_doc['organization_id']
+            
+            # Check if this group is being monitored
+            group_doc = await db.groups.find_one({
+                "group_id": str(chat.id),
+                "tenant_id": organization_id,
+                "is_active": True
+            })
+            
+            if not group_doc:
+                return
+            
+            # Extract message data
+            message_data = {
+                'message_id': str(message.id),
+                'group_id': str(chat.id),
+                'group_name': getattr(chat, 'title', '') or getattr(chat, 'name', ''),
+                'user_id': str(sender.id) if sender else 'Unknown',
+                'username': getattr(sender, 'username', '') if sender else '',
+                'first_name': getattr(sender, 'first_name', '') if sender else '',
+                'last_name': getattr(sender, 'last_name', '') if sender else '',
+                'message_text': message.text or '',
+                'message_date': message.date,
+                'is_edited': is_edit,
+                'detected_by_account': account_id,
+                'media_type': None,
+                'file_path': None
+            }
+            
+            # Handle media
+            if message.media:
+                media_type = self.get_media_type(message.media)
+                message_data['media_type'] = media_type
+                
+                # Download media if configured
+                if media_type and group_doc.get('download_media', False):
+                    try:
+                        file_path = await self.download_media(message, account_id, organization_id)
+                        message_data['file_path'] = file_path
+                    except Exception as e:
+                        logger.error(f"Failed to download media: {e}")
+            
+            # Check watchlist filters
+            should_process = await self.check_watchlist_filters(message_data, organization_id)
+            
+            if should_process:
+                # Store message
+                message_log = MessageLog(
+                    message_id=message_data['message_id'],
+                    group_id=message_data['group_id'],
+                    group_name=message_data['group_name'],
+                    user_id=message_data['user_id'],
+                    username=message_data['username'],
+                    user_full_name=f"{message_data['first_name']} {message_data['last_name']}".strip(),
+                    message_text=message_data['message_text'],
+                    message_type=message_data['media_type'] or 'text',
+                    timestamp=message_data['message_date'],
+                    tenant_id=organization_id,
+                    matched_keywords=[]
+                )
+                
+                await db.message_logs.insert_one(message_log.dict())
+                
+                # Update account activity
+                await db.accounts.update_one(
+                    {"id": account_id},
+                    {
+                        "$set": {
+                            "last_activity": datetime.now(timezone.utc),
+                            "updated_at": datetime.now(timezone.utc)
+                        }
+                    }
+                )
+            
+        except Exception as e:
+            logger.error(f"Error processing message from account {account_id}: {e}")
+    
+    async def check_watchlist_filters(self, message_data: dict, organization_id: str) -> bool:
+        """Check if message matches watchlist filters"""
+        try:
+            # Get active watchlist users for this organization
+            watchlist_users = await db.watchlist_users.find({
+                "tenant_id": organization_id,
+                "is_active": True
+            }).to_list(100)
+            
+            for watchlist_user in watchlist_users:
+                # Check user match
+                user_matches = False
+                
+                if watchlist_user.get('user_id') == message_data['user_id']:
+                    user_matches = True
+                elif watchlist_user.get('username') and message_data['username']:
+                    if watchlist_user['username'].lower() == message_data['username'].lower():
+                        user_matches = True
+                
+                if user_matches:
+                    # Check keywords if specified
+                    keywords = watchlist_user.get('keywords', [])
+                    if keywords:
+                        message_text = message_data['message_text'].lower()
+                        for keyword in keywords:
+                            if keyword.lower() in message_text:
+                                return True
+                    else:
+                        # No keyword filters, user match is enough
+                        return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking watchlist filters: {e}")
+            return False
+    
+    def get_media_type(self, media) -> str:
+        """Determine media type from Telethon media object"""
+        try:
+            from telethon.tl.types import MessageMediaPhoto, MessageMediaDocument
+            
+            if isinstance(media, MessageMediaPhoto):
+                return 'photo'
+            elif isinstance(media, MessageMediaDocument):
+                if media.document.mime_type.startswith('video/'):
+                    return 'video'
+                elif media.document.mime_type.startswith('audio/'):
+                    return 'audio'
+                else:
+                    return 'document'
+            else:
+                return 'other'
+        except:
+            return 'unknown'
+    
+    async def download_media(self, message, account_id: str, organization_id: str) -> str:
+        """Download media from message"""
+        try:
+            # Create media directory
+            media_dir = UPLOAD_DIR / "media" / organization_id / account_id
+            media_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Download file
+            file_path = await message.download_media(file=str(media_dir))
+            return file_path
+            
+        except Exception as e:
+            logger.error(f"Error downloading media: {e}")
+            return None
+    
+    async def disconnect_account(self, account_id: str):
+        """Disconnect and cleanup account client"""
+        try:
+            if account_id in self.active_clients:
+                client = self.active_clients[account_id]
+                await client.disconnect()
+                del self.active_clients[account_id]
+            
+            if account_id in self.client_sessions:
+                del self.client_sessions[account_id]
+            
+            if account_id in self.monitoring_tasks:
+                task = self.monitoring_tasks[account_id]
+                if not task.done():
+                    task.cancel()
+                del self.monitoring_tasks[account_id]
+            
+            if account_id in self.account_groups:
+                del self.account_groups[account_id]
+            
+            # Update database status
+            await db.accounts.update_one(
+                {"id": account_id},
+                {
+                    "$set": {
+                        "status": AccountStatus.INACTIVE.value,
+                        "updated_at": datetime.now(timezone.utc)
+                    }
+                }
+            )
+            
+            logger.info(f"Disconnected account {account_id}")
+            
+        except Exception as e:
+            logger.error(f"Error disconnecting account {account_id}: {e}")
+    
+    async def get_account_status(self, account_id: str) -> dict:
+        """Get detailed status of an account"""
+        try:
+            client = self.active_clients.get(account_id)
+            if not client:
+                return {"status": "inactive", "connected": False}
+            
+            is_connected = client.is_connected()
+            user_info = self.client_sessions.get(account_id, {}).get('user_info', {})
+            groups_count = len(self.account_groups.get(account_id, set()))
+            
+            return {
+                "status": "active",
+                "connected": is_connected,
+                "user_info": user_info,
+                "groups_count": groups_count,
+                "last_seen": datetime.now(timezone.utc)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting account status {account_id}: {e}")
+            return {"status": "error", "error": str(e)}
+
+# Global account manager instance
+account_manager = UserAccountManager()
+
+async def initialize_active_accounts():
+    """Initialize all active accounts on startup"""
+    try:
+        # Get all active accounts from database
+        active_accounts = await db.accounts.find({
+            "status": AccountStatus.ACTIVE.value,
+            "is_active": True
+        }).to_list(100)
+        
+        logger.info(f"Initializing {len(active_accounts)} active accounts...")
+        
+        for account in active_accounts:
+            try:
+                success = await account_manager.initialize_account_client(
+                    account['id'],
+                    account['session_file_path'],
+                    account['json_file_path']
+                )
+                
+                if success:
+                    logger.info(f"Initialized account: {account['name']}")
+                else:
+                    logger.error(f"Failed to initialize account: {account['name']}")
+                    
+            except Exception as e:
+                logger.error(f"Error initializing account {account['name']}: {e}")
+        
+        logger.info("Account initialization complete")
+        
+    except Exception as e:
+        logger.error(f"Error during account initialization: {e}")
+
+# ================== UPDATED ACCOUNT MANAGEMENT ROUTES ==================
+
+@api_router.post("/accounts/{account_id}/activate")
+async def activate_account(
+    account_id: str,
+    current_user: Dict = Depends(require_admin)
+):
+    """Activate account for monitoring (Admin/Owner only)"""
+    try:
+        # Find account
+        account = await db.accounts.find_one({
+            "id": account_id,
+            "organization_id": current_user["organization_id"]
+        })
+        
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        
+        # Initialize Telethon client
+        success = await account_manager.initialize_account_client(
+            account_id,
+            account['session_file_path'],
+            account['json_file_path']
+        )
+        
+        if success:
+            return {"message": "Account activated and monitoring started successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to activate account")
+        
+    except Exception as e:
+        logger.error(f"Account activation failed: {e}")
+        
+        # Update account with error
+        await db.accounts.update_one(
+            {"id": account_id, "organization_id": current_user["organization_id"]},
+            {
+                "$set": {
+                    "status": AccountStatus.ERROR.value,
+                    "updated_at": datetime.now(timezone.utc),
+                    "error_message": str(e)
+                }
+            }
+        )
+        
+        raise HTTPException(status_code=500, detail=f"Account activation failed: {str(e)}")
+
+@api_router.post("/accounts/{account_id}/deactivate")
+async def deactivate_account(
+    account_id: str,
+    current_user: Dict = Depends(require_admin)
+):
+    """Deactivate account monitoring (Admin/Owner only)"""
+    try:
+        # Disconnect account client
+        await account_manager.disconnect_account(account_id)
+        
+        return {"message": "Account deactivated successfully"}
+        
+    except Exception as e:
+        logger.error(f"Account deactivation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Account deactivation failed: {str(e)}")
+
+@api_router.get("/accounts/{account_id}/status")
+async def get_account_status(
+    account_id: str,
+    current_user: Dict = Depends(get_current_active_user)
+):
+    """Get detailed account status"""
+    try:
+        # Verify account belongs to user's organization
+        account = await db.accounts.find_one({
+            "id": account_id,
+            "organization_id": current_user["organization_id"]
+        })
+        
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        
+        status = await account_manager.get_account_status(account_id)
+        return status
+        
+    except Exception as e:
+        logger.error(f"Error getting account status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get account status: {str(e)}")
+
+# ================== ENHANCED STARTUP EVENT HANDLERS ==================
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    logger.info("Starting Telegram Monitor Bot API")
+    
+    # Initialize bot
+    try:
+        bot_info = await bot.get_me()
+        logger.info(f"Bot connected: @{bot_info.username}")
+    except Exception as e:
+        logger.error(f"Bot connection failed: {e}")
+    
+    # Initialize active user accounts
+    await initialize_active_accounts()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    logger.info("Shutting down Telegram Monitor Bot API")
+    
+    # Disconnect all active accounts
+    for account_id in list(account_manager.active_clients.keys()):
+        await account_manager.disconnect_account(account_id)
+    
+    await shutdown_db_client()
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
