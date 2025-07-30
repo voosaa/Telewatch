@@ -2626,6 +2626,254 @@ class UserAccountManager:
 # Global account manager instance
 account_manager = UserAccountManager()
 
+# ================== PHASE 2: MULTI-ACCOUNT COORDINATION ==================
+
+class AccountHealthMonitor:
+    """Monitors health and performance of user accounts"""
+    
+    def __init__(self, account_manager: UserAccountManager):
+        self.account_manager = account_manager
+        self.health_stats: Dict[str, dict] = {}
+        self.monitoring_task: Optional[asyncio.Task] = None
+        self.health_check_interval = 300  # 5 minutes
+        
+    async def start_health_monitoring(self):
+        """Start continuous health monitoring"""
+        self.monitoring_task = asyncio.create_task(self._health_monitoring_loop())
+        logger.info("Started account health monitoring")
+        
+    async def stop_health_monitoring(self):
+        """Stop health monitoring"""
+        if self.monitoring_task and not self.monitoring_task.done():
+            self.monitoring_task.cancel()
+            try:
+                await self.monitoring_task
+            except asyncio.CancelledError:
+                pass
+        logger.info("Stopped account health monitoring")
+        
+    async def _health_monitoring_loop(self):
+        """Continuous health monitoring loop"""
+        while True:
+            try:
+                await self._check_all_accounts_health()
+                await asyncio.sleep(self.health_check_interval)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in health monitoring loop: {e}")
+                await asyncio.sleep(60)  # Wait 1 minute on error
+                
+    async def _check_all_accounts_health(self):
+        """Check health of all active accounts"""
+        try:
+            for account_id, client in self.account_manager.active_clients.items():
+                await self._check_account_health(account_id, client)
+        except Exception as e:
+            logger.error(f"Error checking accounts health: {e}")
+            
+    async def _check_account_health(self, account_id: str, client: TelegramClient):
+        """Check health of a specific account"""
+        try:
+            health_data = {
+                'account_id': account_id,
+                'timestamp': datetime.now(timezone.utc),
+                'connected': False,
+                'authorized': False,
+                'response_time': None,
+                'error_count': 0,
+                'last_activity': None,
+                'groups_accessible': 0
+            }
+            
+            start_time = datetime.now(timezone.utc)
+            
+            # Check connection
+            if client.is_connected():
+                health_data['connected'] = True
+                
+                # Check authorization
+                try:
+                    health_data['authorized'] = await client.is_user_authorized()
+                    
+                    if health_data['authorized']:
+                        # Test API response time
+                        me = await client.get_me()
+                        end_time = datetime.now(timezone.utc)
+                        health_data['response_time'] = (end_time - start_time).total_seconds()
+                        
+                        # Check accessible groups
+                        accessible_groups = 0
+                        async for dialog in client.iter_dialogs(limit=10):
+                            if dialog.is_group or dialog.is_channel:
+                                accessible_groups += 1
+                        health_data['groups_accessible'] = accessible_groups
+                        
+                except Exception as e:
+                    logger.warning(f"Health check failed for account {account_id}: {e}")
+                    health_data['error_count'] = 1
+            
+            # Update health stats
+            self.health_stats[account_id] = health_data
+            
+            # Update database with health status
+            await db.accounts.update_one(
+                {"id": account_id},
+                {
+                    "$set": {
+                        "last_health_check": datetime.now(timezone.utc),
+                        "health_status": "healthy" if health_data['connected'] and health_data['authorized'] else "unhealthy",
+                        "response_time": health_data['response_time'],
+                        "groups_accessible": health_data['groups_accessible']
+                    }
+                }
+            )
+            
+            # Auto-recovery for unhealthy accounts
+            if not health_data['connected'] or not health_data['authorized']:
+                await self._attempt_account_recovery(account_id)
+                
+        except Exception as e:
+            logger.error(f"Error checking health for account {account_id}: {e}")
+            
+    async def _attempt_account_recovery(self, account_id: str):
+        """Attempt to recover an unhealthy account"""
+        try:
+            logger.info(f"Attempting recovery for account {account_id}")
+            
+            # Get account info
+            account_doc = await db.accounts.find_one({"id": account_id})
+            if not account_doc:
+                return
+            
+            # Disconnect current client if exists
+            await self.account_manager.disconnect_account(account_id)
+            
+            # Wait a bit before reconnection
+            await asyncio.sleep(10)
+            
+            # Attempt reconnection
+            success = await self.account_manager.initialize_account_client(
+                account_id,
+                account_doc['session_file_path'],
+                account_doc['json_file_path']
+            )
+            
+            if success:
+                logger.info(f"Successfully recovered account {account_id}")
+            else:
+                logger.warning(f"Failed to recover account {account_id}")
+                
+        except Exception as e:
+            logger.error(f"Error during account recovery {account_id}: {e}")
+    
+    def get_health_summary(self) -> dict:
+        """Get overall health summary"""
+        try:
+            total_accounts = len(self.health_stats)
+            healthy_accounts = sum(1 for stats in self.health_stats.values() 
+                                 if stats['connected'] and stats['authorized'])
+            
+            avg_response_time = None
+            response_times = [stats['response_time'] for stats in self.health_stats.values() 
+                            if stats['response_time'] is not None]
+            if response_times:
+                avg_response_time = sum(response_times) / len(response_times)
+            
+            return {
+                'total_accounts': total_accounts,
+                'healthy_accounts': healthy_accounts,
+                'unhealthy_accounts': total_accounts - healthy_accounts,
+                'health_percentage': (healthy_accounts / total_accounts * 100) if total_accounts > 0 else 0,
+                'average_response_time': avg_response_time,
+                'last_check': max([stats['timestamp'] for stats in self.health_stats.values()]) if self.health_stats else None
+            }
+        except Exception as e:
+            logger.error(f"Error getting health summary: {e}")
+            return {'error': str(e)}
+
+class AccountLoadBalancer:
+    """Load balances message processing across multiple accounts"""
+    
+    def __init__(self, account_manager: UserAccountManager):
+        self.account_manager = account_manager
+        self.account_loads: Dict[str, int] = {}  # account_id -> message count
+        self.account_performance: Dict[str, dict] = {}  # account_id -> performance metrics
+        
+    def record_message_processed(self, account_id: str, processing_time: float):
+        """Record that an account processed a message"""
+        try:
+            self.account_loads[account_id] = self.account_loads.get(account_id, 0) + 1
+            
+            if account_id not in self.account_performance:
+                self.account_performance[account_id] = {
+                    'total_messages': 0,
+                    'total_processing_time': 0,
+                    'average_processing_time': 0,
+                    'last_activity': datetime.now(timezone.utc)
+                }
+            
+            perf = self.account_performance[account_id]
+            perf['total_messages'] += 1
+            perf['total_processing_time'] += processing_time
+            perf['average_processing_time'] = perf['total_processing_time'] / perf['total_messages']
+            perf['last_activity'] = datetime.now(timezone.utc)
+            
+        except Exception as e:
+            logger.error(f"Error recording message processing for {account_id}: {e}")
+    
+    def get_best_account_for_forwarding(self, available_accounts: List[str]) -> Optional[str]:
+        """Select the best account for forwarding based on load and performance"""
+        try:
+            if not available_accounts:
+                return None
+            
+            best_account = None
+            best_score = float('inf')
+            
+            for account_id in available_accounts:
+                # Check if account is healthy
+                if account_id not in self.account_manager.active_clients:
+                    continue
+                
+                # Calculate load score (lower is better)
+                current_load = self.account_loads.get(account_id, 0)
+                avg_processing_time = self.account_performance.get(account_id, {}).get('average_processing_time', 1.0)
+                
+                # Score = load * processing_time (lower is better)
+                score = current_load * avg_processing_time
+                
+                if score < best_score:
+                    best_score = score
+                    best_account = account_id
+            
+            return best_account
+            
+        except Exception as e:
+            logger.error(f"Error selecting best account for forwarding: {e}")
+            return available_accounts[0] if available_accounts else None
+    
+    def reset_load_counters(self):
+        """Reset load counters (called periodically)"""
+        self.account_loads.clear()
+        logger.debug("Reset account load counters")
+    
+    def get_load_summary(self) -> dict:
+        """Get load balancing summary"""
+        try:
+            return {
+                'account_loads': self.account_loads.copy(),
+                'account_performance': self.account_performance.copy(),
+                'total_messages_processed': sum(self.account_loads.values())
+            }
+        except Exception as e:
+            logger.error(f"Error getting load summary: {e}")
+            return {'error': str(e)}
+
+# Global instances for Phase 2
+health_monitor = AccountHealthMonitor(account_manager)
+load_balancer = AccountLoadBalancer(account_manager)
+
 async def initialize_active_accounts():
     """Initialize all active accounts on startup"""
     try:
