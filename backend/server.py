@@ -4062,6 +4062,9 @@ async def shutdown_event():
     # Stop health monitoring
     await health_monitor.stop_health_monitoring()
     
+    # Cleanup bot handlers
+    await cleanup_bot_handlers()
+    
     # Disconnect all active accounts
     for account_id in list(account_manager.active_clients.keys()):
         await account_manager.disconnect_account(account_id)
