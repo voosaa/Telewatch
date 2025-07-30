@@ -1298,9 +1298,16 @@ class TelegramBotAPITester:
 if __name__ == "__main__":
     tester = TelegramBotAPITester()
     try:
-        summary = tester.run_all_tests()
+        # Run Telegram Authentication System Tests
+        telegram_auth_summary = tester.run_telegram_auth_tests()
+        
+        # Print overall summary
+        print("\n🎯 OVERALL TEST EXECUTION SUMMARY")
+        print("=" * 60)
+        print(f"Telegram Authentication Tests: {telegram_auth_summary['passed']}/{telegram_auth_summary['total']} passed ({telegram_auth_summary['success_rate']:.1f}%)")
+        
         # Exit with appropriate code
-        exit(0 if summary and summary['failed'] == 0 else 1)
+        exit(0 if telegram_auth_summary['failed'] == 0 else 1)
     except Exception as e:
         print(f"❌ Test execution failed: {e}")
         exit(1)
