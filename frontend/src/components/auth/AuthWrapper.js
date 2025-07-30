@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import LoginForm from './LoginForm';
-import RegisterForm from './RegisterForm';
+import TelegramLogin from './LoginForm';
+import TelegramRegister from './RegisterForm';
 
 const AuthWrapper = ({ children }) => {
   const { user, loading } = useAuth();
