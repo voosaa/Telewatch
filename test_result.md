@@ -594,7 +594,12 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Subscription Management System - Organization Plan Management"
+    - "Telegram Authentication System - Authentication Verification"
+    - "Telegram Authentication System - User Registration"
+    - "Telegram Authentication System - User Login"
+    - "Telegram Authentication System - Current User Info"
+    - "Telegram Authentication System - User Model Updates"
+    - "Telegram Authentication System - Deprecated Email/Password Login"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
