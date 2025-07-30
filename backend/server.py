@@ -4341,7 +4341,7 @@ async def get_supported_currencies():
         if response.status_code == 200:
             all_currencies = response.json().get("currencies", [])
             # Filter to our supported cryptocurrencies
-            supported = ["btc", "eth", "usdt", "usdc", "sol"]
+            supported = ["btc", "eth", "usdc", "sol"]
             filtered_currencies = [
                 {"currency": curr.lower(), "name": curr.upper(), "network": curr.upper()}
                 for curr in all_currencies if curr.lower() in supported
