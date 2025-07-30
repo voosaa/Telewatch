@@ -3594,6 +3594,137 @@ class TelegramBotAPITester:
         # Print final summary
         self.print_final_summary()
 
+    def run_subscription_management_tests(self):
+        """Run subscription management tests"""
+        print("\n💳 Starting Subscription Management Tests")
+        print("=" * 50)
+        
+        # Test organization current get
+        self.test_organization_current_get()
+        
+        # Test plan updates
+        self.test_organization_plan_updates()
+        
+        # Test plan validation
+        self.test_organization_plan_validation()
+        
+        # Test authentication required
+        self.test_organization_authentication_required()
+        
+        # Test admin permissions
+        self.test_organization_admin_permissions()
+        
+        # Test data integrity
+        self.test_organization_data_integrity()
+        
+        # Test comprehensive workflow
+        self.test_subscription_management_comprehensive()
+
+    def run_account_management_tests(self):
+        """Run account management tests"""
+        print("\n📁 Starting Account Management Tests")
+        print("=" * 50)
+        
+        # Test list accounts
+        self.test_account_management_list_accounts()
+        
+        # Test file upload
+        self.test_account_management_file_upload()
+        
+        # Test account deletion
+        self.test_account_management_account_deletion()
+        
+        # Test account activation
+        self.test_account_management_account_activation()
+        
+        # Test account deactivation
+        self.test_account_management_account_deactivation()
+        
+        # Test file validation
+        self.test_account_management_file_validation()
+        
+        # Test authentication
+        self.test_account_management_authentication()
+
+    def run_multi_account_monitoring_tests(self):
+        """Run multi-account monitoring tests"""
+        print("\n🔍 Starting Multi-Account Monitoring Tests")
+        print("=" * 50)
+        
+        # Test multi-account session monitoring phases
+        self.test_multi_account_session_monitoring_phase1()
+        self.test_multi_account_session_monitoring_phase2()
+        self.test_multi_account_session_monitoring_phase3()
+        self.test_multi_account_session_monitoring_phase4()
+        
+        # Test system integration
+        self.test_system_integration_complete_lifecycle()
+        self.test_multi_tenant_isolation_verification()
+
+    def run_bot_command_tests(self):
+        """Run bot command tests"""
+        print("\n🤖 Starting Bot Command Tests")
+        print("=" * 50)
+        
+        # Run focused telegram bot tests
+        self.run_focused_telegram_bot_tests()
+
+    def print_final_summary(self):
+        """Print comprehensive final summary"""
+        print("\n" + "=" * 80)
+        print("📊 COMPREHENSIVE BACKEND API TEST SUMMARY")
+        print("=" * 80)
+        
+        total_tests = len(self.test_results)
+        passed_tests = len([t for t in self.test_results if t['success']])
+        failed_tests = total_tests - passed_tests
+        
+        print(f"Total Tests: {total_tests}")
+        print(f"✅ Passed: {passed_tests}")
+        print(f"❌ Failed: {failed_tests}")
+        print(f"Success Rate: {(passed_tests/total_tests)*100:.1f}%" if total_tests > 0 else "No tests run")
+        
+        # Break down by test categories
+        categories = {
+            'NOWPayments': [t for t in self.test_results if 'nowpayments' in t['test'].lower()],
+            'Telegram Auth': [t for t in self.test_results if any(keyword in t['test'].lower() for keyword in ['telegram', 'auth'])],
+            'Subscription': [t for t in self.test_results if 'organization' in t['test'].lower() or 'subscription' in t['test'].lower()],
+            'Account Management': [t for t in self.test_results if 'account' in t['test'].lower()],
+            'Bot Commands': [t for t in self.test_results if 'bot' in t['test'].lower()],
+            'Other': []
+        }
+        
+        # Categorize remaining tests
+        categorized_tests = set()
+        for category_tests in categories.values():
+            categorized_tests.update(t['test'] for t in category_tests)
+        
+        categories['Other'] = [t for t in self.test_results if t['test'] not in categorized_tests]
+        
+        print("\n📋 TEST BREAKDOWN BY CATEGORY:")
+        for category, tests in categories.items():
+            if tests:
+                passed = len([t for t in tests if t['success']])
+                total = len(tests)
+                print(f"  {category}: {passed}/{total} ({(passed/total)*100:.1f}%)")
+        
+        if failed_tests > 0:
+            print("\n❌ FAILED TESTS:")
+            for test in self.test_results:
+                if not test['success']:
+                    print(f"  • {test['test']}: {test['details']}")
+        
+        print("\n" + "=" * 80)
+        
+        return {
+            'total': total_tests,
+            'passed': passed_tests,
+            'failed': failed_tests,
+            'success_rate': (passed_tests/total_tests)*100 if total_tests > 0 else 0,
+            'results': self.test_results,
+            'categories': {k: {'total': len(v), 'passed': len([t for t in v if t['success']])} for k, v in categories.items()}
+        }
+
     def print_summary(self):
         """Print test summary"""
         print("\n" + "=" * 60)
