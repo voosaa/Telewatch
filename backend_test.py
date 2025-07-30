@@ -3278,8 +3278,8 @@ class TelegramBotAPITester:
                     self.log_test(f"NOWPayments Validation - Invalid Plan '{invalid_plan}'", False, 
                                 f"Expected HTTP 400 but got {response.status_code}")
             
-            # Test invalid currencies
-            invalid_currencies = ["doge", "ltc", "invalid", "", "BTC"]  # BTC uppercase should be rejected
+            # Test invalid currencies (including USDT which is now removed)
+            invalid_currencies = ["doge", "ltc", "usdt", "invalid", "", "BTC"]  # USDT now invalid, BTC uppercase should be rejected
             
             for invalid_currency in invalid_currencies:
                 charge_data = {
