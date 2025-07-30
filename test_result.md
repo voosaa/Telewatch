@@ -494,87 +494,108 @@ backend:
 
   - task: "Account Management System - List Accounts API"
     implemented: true
-    working: "NA"
+    working: true
     file: "server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented GET /api/accounts endpoint to list all accounts in current organization with proper authentication and tenant isolation. Returns AccountResponse objects with account details including status, phone_number, username, and metadata."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: List Accounts API working perfectly. Successfully retrieves accounts for current organization with proper response structure. Empty response correctly handled for new organizations. All required fields (id, name, status, is_active, created_at) present in response. Authentication and tenant isolation working correctly."
 
   - task: "Account Management System - File Upload API"
     implemented: true
-    working: "NA"
+    working: true
     file: "server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented POST /api/accounts/upload endpoint for uploading session and JSON files. Includes file extension validation (.session and .json), unique filename generation, JSON metadata extraction, and proper file storage in /app/uploads/sessions and /app/uploads/json directories. Requires admin/owner permissions."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: File Upload API working excellently. Successfully uploads session and JSON files with proper metadata extraction. JSON data (phone_number, username, first_name, last_name) correctly extracted and stored in account record. Unique filename generation working. File storage in dedicated directories functional. Admin/owner permissions enforced."
 
   - task: "Account Management System - Account Deletion API"
     implemented: true
-    working: "NA"
+    working: true
     file: "server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented DELETE /api/accounts/{account_id} endpoint to delete account and associated files. Includes proper file cleanup from filesystem, database record deletion, and organization-scoped access control. Requires admin/owner permissions."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Account Deletion API working perfectly. Successfully deletes account records and associated files from filesystem. Database cleanup verified - deleted accounts no longer appear in account list. Organization-scoped access control working. Admin/owner permissions properly enforced."
 
   - task: "Account Management System - Account Activation API"
     implemented: true
-    working: "NA"
+    working: true
     file: "server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented POST /api/accounts/{account_id}/activate endpoint to activate account for monitoring. Updates account status to ACTIVE, clears error messages, and includes proper error handling with status updates to ERROR state on failures. Requires admin/owner permissions."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Account Activation API working perfectly. Successfully activates accounts for monitoring with status update to 'active'. Error message clearing functional. Status verification confirmed through account list endpoint. Organization scoping and admin/owner permissions working correctly."
 
   - task: "Account Management System - Account Deactivation API"
     implemented: true
-    working: "NA"
+    working: true
     file: "server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented POST /api/accounts/{account_id}/deactivate endpoint to deactivate account monitoring. Updates account status to INACTIVE with proper error handling and organization-scoped access control. Requires admin/owner permissions."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Account Deactivation API working perfectly. Successfully deactivates account monitoring with status update to 'inactive'. Status verification confirmed through account list endpoint. Organization scoping and admin/owner permissions working correctly."
 
   - task: "Account Management System - File Validation & Storage"
     implemented: true
-    working: "NA"
+    working: true
     file: "server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented comprehensive file validation system with .session and .json extension checks, unique filename generation using organization_id and timestamps, proper file storage in dedicated directories, and JSON metadata extraction and storage in Account model."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: File Validation & Storage working excellently. File extension validation functional for both .session and .json files. Invalid JSON content properly rejected with HTTP 400. Unique filename generation working with organization_id and timestamp. File storage in /app/uploads/sessions and /app/uploads/json directories confirmed. JSON metadata extraction and storage working perfectly."
 
   - task: "Account Management System - Authentication & Authorization"
     implemented: true
-    working: "NA"
+    working: true
     file: "server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented proper authentication and authorization for all account endpoints using require_admin dependency. Ensures only admin/owner users can manage accounts, with proper tenant isolation so users can only access accounts from their organization."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Authentication & Authorization working perfectly. All account endpoints (list, upload, delete, activate, deactivate) properly require authentication - unauthenticated requests correctly rejected with HTTP 403. Admin/owner permissions enforced. Tenant isolation confirmed - users can only access accounts from their organization. Security model working as designed."
 
 frontend:
   - task: "Telegram Authentication UI - Login Widget Integration"
