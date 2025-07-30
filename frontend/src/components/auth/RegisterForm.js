@@ -81,63 +81,69 @@ const TelegramRegister = ({ onSwitchToLogin }) => {
     };
   }, [showManualForm]);
 
-  const initializeTelegramWidget = () => {
-    if (widgetRef.current && window.TelegramLoginWidget) {
-      // Clear any existing widget
+  // Create the Telegram widget
+  const createTelegramWidget = () => {
+    if (!widgetRef.current || widgetLoaded || showManualForm) return;
+
+    try {
+      // Clear any existing content
       widgetRef.current.innerHTML = '';
-      
-      // Create the widget manually as a fallback
+
+      // Create the Telegram login widget script element
       const widget = document.createElement('script');
       widget.setAttribute('src', 'https://telegram.org/js/telegram-widget.js?22');
       widget.setAttribute('data-telegram-login', botUsername);
       widget.setAttribute('data-size', 'large');
-      widget.setAttribute('data-auth-url', window.location.origin + '/telegram-auth-register');
-      widget.setAttribute('data-request-access', 'write');
       widget.setAttribute('data-onauth', 'onTelegramAuthRegister(user)');
+      widget.setAttribute('data-request-access', 'write');
       
       widgetRef.current.appendChild(widget);
       setWidgetLoaded(true);
+      
+    } catch (err) {
+      console.error('Error creating Telegram widget:', err);
+      // Fallback to iframe approach
+      createTelegramWidgetIframe();
     }
   };
 
-  // Handle manual widget creation as iframe
-  const createTelegramWidget = () => {
-    if (!widgetRef.current || widgetLoaded) return;
+  // Fallback iframe approach
+  const createTelegramWidgetIframe = () => {
+    if (!widgetRef.current || widgetLoaded || showManualForm) return;
 
-    const widget = document.createElement('iframe');
-    widget.src = `https://oauth.telegram.org/auth?bot_id=8342094196&origin=${encodeURIComponent(window.location.origin)}&return_to=${encodeURIComponent(window.location.origin)}&embed=1&request_access=write`;
-    widget.width = '100%';
-    widget.height = '186';
-    widget.frameBorder = '0';
-    widget.scrolling = 'no';
-    widget.style.border = 'none';
-    widget.style.borderRadius = '8px';
-    
-    // Listen for messages from the iframe
-    const handleMessage = (event) => {
-      if (event.origin !== 'https://oauth.telegram.org') return;
+    try {
+      const widget = document.createElement('iframe');
+      widget.src = `https://oauth.telegram.org/auth?bot_id=8342094196&origin=${encodeURIComponent(window.location.origin)}&return_to=${encodeURIComponent(window.location.origin)}&embed=1&request_access=write`;
+      widget.width = '100%';
+      widget.height = '186';
+      widget.frameBorder = '0';
+      widget.scrolling = 'no';
+      widget.style.border = 'none';
+      widget.style.borderRadius = '8px';
       
-      if (event.data && typeof event.data === 'object' && event.data.user) {
-        handleTelegramAuth(event.data.user);
-      }
-    };
-    
-    window.addEventListener('message', handleMessage);
-    
-    widgetRef.current.appendChild(widget);
-    setWidgetLoaded(true);
+      // Listen for messages from the iframe
+      const handleMessage = (event) => {
+        if (event.origin !== 'https://oauth.telegram.org') return;
+        
+        try {
+          if (event.data && typeof event.data === 'object' && event.data.user) {
+            handleTelegramAuth(event.data.user);
+          }
+        } catch (err) {
+          console.error('Error processing Telegram auth message:', err);
+        }
+      };
+      
+      window.addEventListener('message', handleMessage);
+      
+      widgetRef.current.appendChild(widget);
+      setWidgetLoaded(true);
+      
+    } catch (err) {
+      console.error('Error creating Telegram iframe widget:', err);
+      setError('Failed to initialize Telegram authentication. Please try refreshing the page.');
+    }
   };
-
-  // Auto-create widget after component mounts
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!widgetLoaded && !showManualForm) {
-        createTelegramWidget();
-      }
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  }, [widgetLoaded, showManualForm]);
 
   const onSubmit = async (data) => {
     setIsLoading(true);
