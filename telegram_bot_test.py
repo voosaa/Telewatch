@@ -265,6 +265,7 @@ class TelegramBotCommandTester:
                     "date": int(time.time()),
                     "text": "Previous message text"
                 },
+                "chat_instance": f"chat_instance_{int(time.time())}",
                 "data": callback_data
             }
         }
