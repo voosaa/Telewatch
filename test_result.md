@@ -722,14 +722,7 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Account Management System - List Accounts API"
-    - "Account Management System - File Upload API"
-    - "Account Management System - Account Deletion API"
-    - "Account Management System - Account Activation API"
-    - "Account Management System - Account Deactivation API"
-    - "Account Management System - File Validation & Storage"
-    - "Account Management System - Authentication & Authorization"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
