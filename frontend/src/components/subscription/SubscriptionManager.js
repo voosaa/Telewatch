@@ -308,21 +308,55 @@ const SubscriptionManager = () => {
                     Downgrade Not Available
                   </div>
                 ) : (
-                  <button
-                    onClick={() => handleCryptoUpgrade(planKey)}
-                    disabled={paymentLoading === planKey}
-                    className={`w-full py-3 px-4 bg-${plan.color}-600 hover:bg-${plan.color}-700 text-white rounded-lg font-medium transition-colors duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {paymentLoading === planKey ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Bitcoin className="h-4 w-4" />
-                        Pay with Crypto
-                        <ArrowRight className="h-4 w-4" />
-                      </>
-                    )}
-                  </button>
+                  <>
+                    {/* Cryptocurrency Selection Dropdown */}
+                    <div className="relative">
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value && !paymentLoading) {
+                            const selectedCurrency = supportedCurrencies.find(c => c.currency === e.target.value);
+                            if (selectedCurrency) {
+                              handleCurrencySelect(planKey, selectedCurrency);
+                            }
+                          }
+                          e.target.value = ''; // Reset dropdown
+                        }}
+                        disabled={paymentLoading === planKey}
+                        className={`w-full py-3 px-4 bg-${plan.color}-600 hover:bg-${plan.color}-700 text-white rounded-lg font-medium transition-colors duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed appearance-none`}
+                        style={{ backgroundImage: 'none' }}
+                      >
+                        <option value="">
+                          {paymentLoading === planKey ? 'Creating Payment...' : '💳 Pay with Crypto'}
+                        </option>
+                        {supportedCurrencies.map((currency) => (
+                          <option key={currency.currency} value={currency.currency} className="text-gray-900">
+                            💰 Pay with {currency.name} ({currency.currency.toUpperCase()})
+                          </option>
+                        ))}
+                      </select>
+                      {paymentLoading === planKey && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <Loader2 className="h-4 w-4 animate-spin text-white" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Quick Bitcoin Button */}
+                    <button
+                      onClick={() => handleCryptoUpgrade(planKey, 'btc')}
+                      disabled={paymentLoading === planKey}
+                      className={`w-full py-2 px-3 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm`}
+                    >
+                      {paymentLoading === planKey ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <>
+                          <Bitcoin className="h-3 w-3" />
+                          Quick Pay with Bitcoin
+                        </>
+                      )}
+                    </button>
+                  </>
                 )}
               </div>
 
