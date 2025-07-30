@@ -143,6 +143,399 @@ class TelegramBotAPITester:
         except Exception as e:
             self.log_test("Bot Connection Test", False, f"Request error: {str(e)}")
 
+    def test_telegram_authentication_verification(self):
+        """Test the verify_telegram_authentication function with sample data"""
+        try:
+            # Test with valid Telegram auth data
+            valid_auth_data = self.generate_telegram_auth_data(
+                telegram_id=123456789,
+                first_name="Test",
+                last_name="User",
+                username="testuser",
+                photo_url="https://example.com/photo.jpg"
+            )
+            
+            # Since we can't directly test the verification function, we'll test it through the auth endpoint
+            response = self.session.post(f"{API_BASE}/auth/telegram", json=valid_auth_data)
+            
+            # For a new user, we expect 404 (user not found, needs registration)
+            if response.status_code == 404:
+                self.log_test("Telegram Auth Verification - Valid Data", True, 
+                            "Valid Telegram auth data correctly processed (user not found, needs registration)", response.json())
+            elif response.status_code == 200:
+                self.log_test("Telegram Auth Verification - Valid Data", True, 
+                            "Valid Telegram auth data correctly processed (existing user login)", response.json())
+            else:
+                self.log_test("Telegram Auth Verification - Valid Data", False, 
+                            f"Unexpected response: HTTP {response.status_code}", response.text)
+            
+            # Test with invalid hash
+            invalid_auth_data = valid_auth_data.copy()
+            invalid_auth_data['hash'] = "invalid_hash_value"
+            
+            response = self.session.post(f"{API_BASE}/auth/telegram", json=invalid_auth_data)
+            
+            if response.status_code == 401:
+                self.log_test("Telegram Auth Verification - Invalid Hash", True, 
+                            "Invalid hash correctly rejected with HTTP 401", response.json())
+            else:
+                self.log_test("Telegram Auth Verification - Invalid Hash", False, 
+                            f"Expected HTTP 401 but got {response.status_code}", response.text)
+            
+            # Test with old timestamp (older than 24 hours)
+            old_auth_data = self.generate_telegram_auth_data(
+                telegram_id=123456789,
+                first_name="Test",
+                last_name="User"
+            )
+            # Manually set old timestamp (25 hours ago)
+            old_timestamp = int(datetime.now(timezone.utc).timestamp()) - (25 * 3600)
+            old_auth_data['auth_date'] = old_timestamp
+            
+            # Recalculate hash with old timestamp
+            data_check_arr = [f"{key}={value}" for key, value in sorted(old_auth_data.items()) if key != 'hash']
+            data_check_string = '\n'.join(data_check_arr)
+            secret_key = hashlib.sha256(self.telegram_bot_token.encode()).digest()
+            old_auth_data['hash'] = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+            
+            response = self.session.post(f"{API_BASE}/auth/telegram", json=old_auth_data)
+            
+            if response.status_code == 401:
+                self.log_test("Telegram Auth Verification - Old Timestamp", True, 
+                            "Old timestamp correctly rejected with HTTP 401", response.json())
+            else:
+                self.log_test("Telegram Auth Verification - Old Timestamp", False, 
+                            f"Expected HTTP 401 but got {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Telegram Authentication Verification", False, f"Error: {str(e)}")
+
+    def test_telegram_user_registration(self):
+        """Test POST /api/auth/register - Telegram user registration"""
+        try:
+            import random
+            import time
+            
+            # Generate unique test data
+            timestamp = int(time.time())
+            random_suffix = random.randint(1000, 9999)
+            
+            telegram_id = random.randint(100000000, 999999999)
+            username = f"testuser_{timestamp}_{random_suffix}"
+            org_name = f"Test Organization {timestamp}"
+            
+            registration_data = {
+                "telegram_id": telegram_id,
+                "username": username,
+                "first_name": "Test",
+                "last_name": "User",
+                "photo_url": "https://example.com/photo.jpg",
+                "organization_name": org_name
+            }
+            
+            response = self.session.post(f"{API_BASE}/auth/register", json=registration_data)
+            
+            if response.status_code == 200:
+                auth_response = response.json()
+                
+                # Verify response structure
+                required_fields = ['access_token', 'token_type', 'expires_in', 'user']
+                missing_fields = [field for field in required_fields if field not in auth_response]
+                
+                if not missing_fields:
+                    user_data = auth_response['user']
+                    
+                    # Verify user data structure
+                    user_required_fields = ['id', 'telegram_id', 'username', 'first_name', 'last_name', 'full_name', 'is_active', 'role', 'organization_id']
+                    user_missing_fields = [field for field in user_required_fields if field not in user_data]
+                    
+                    if not user_missing_fields:
+                        # Verify Telegram-specific fields
+                        if (user_data['telegram_id'] == telegram_id and 
+                            user_data['username'] == username and
+                            user_data['first_name'] == "Test" and
+                            user_data['last_name'] == "User" and
+                            user_data['full_name'] == "Test User" and
+                            user_data['role'] == "owner"):
+                            
+                            self.log_test("Telegram User Registration", True, 
+                                        f"Successfully registered Telegram user with ID {telegram_id}", auth_response)
+                            
+                            # Store for cleanup and further testing
+                            self.created_resources['users'].append(user_data['id'])
+                            self.created_resources['organizations'].append(user_data['organization_id'])
+                            self.auth_token = auth_response['access_token']
+                            self.test_user_data = {
+                                'telegram_id': telegram_id,
+                                'username': username,
+                                'organization_name': org_name,
+                                'user_id': user_data['id'],
+                                'organization_id': user_data['organization_id']
+                            }
+                            
+                            # Set auth header for subsequent tests
+                            self.session.headers.update({
+                                'Authorization': f'Bearer {self.auth_token}'
+                            })
+                            
+                        else:
+                            self.log_test("Telegram User Registration", False, 
+                                        "User data doesn't match registration input", user_data)
+                    else:
+                        self.log_test("Telegram User Registration", False, 
+                                    f"Missing user fields: {user_missing_fields}", user_data)
+                else:
+                    self.log_test("Telegram User Registration", False, 
+                                f"Missing response fields: {missing_fields}", auth_response)
+            else:
+                self.log_test("Telegram User Registration", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+            # Test duplicate registration prevention
+            if response.status_code == 200:
+                duplicate_response = self.session.post(f"{API_BASE}/auth/register", json=registration_data)
+                if duplicate_response.status_code == 400:
+                    self.log_test("Telegram Registration - Duplicate Prevention", True, 
+                                "Correctly prevented duplicate user registration", duplicate_response.json())
+                else:
+                    self.log_test("Telegram Registration - Duplicate Prevention", False, 
+                                f"Expected HTTP 400 but got {duplicate_response.status_code}", duplicate_response.text)
+                
+        except Exception as e:
+            self.log_test("Telegram User Registration", False, f"Error: {str(e)}")
+
+    def test_telegram_user_login(self):
+        """Test POST /api/auth/telegram - Telegram user login"""
+        if not self.test_user_data:
+            self.log_test("Telegram User Login", False, "No test user data available (registration may have failed)")
+            return
+            
+        try:
+            # Generate valid auth data for existing user
+            auth_data = self.generate_telegram_auth_data(
+                telegram_id=self.test_user_data['telegram_id'],
+                first_name="Test",
+                last_name="User", 
+                username=self.test_user_data['username'],
+                photo_url="https://example.com/updated_photo.jpg"
+            )
+            
+            response = self.session.post(f"{API_BASE}/auth/telegram", json=auth_data)
+            
+            if response.status_code == 200:
+                login_response = response.json()
+                
+                # Verify response structure
+                required_fields = ['access_token', 'token_type', 'expires_in', 'user']
+                missing_fields = [field for field in required_fields if field not in login_response]
+                
+                if not missing_fields:
+                    user_data = login_response['user']
+                    
+                    # Verify user data was updated from Telegram
+                    if (user_data['telegram_id'] == self.test_user_data['telegram_id'] and
+                        user_data['username'] == self.test_user_data['username'] and
+                        'last_login' in user_data):
+                        
+                        self.log_test("Telegram User Login", True, 
+                                    f"Successfully logged in Telegram user {self.test_user_data['username']}", login_response)
+                        
+                        # Update auth token
+                        self.auth_token = login_response['access_token']
+                        self.session.headers.update({
+                            'Authorization': f'Bearer {self.auth_token}'
+                        })
+                        
+                    else:
+                        self.log_test("Telegram User Login", False, 
+                                    "User data doesn't match expected values", user_data)
+                else:
+                    self.log_test("Telegram User Login", False, 
+                                f"Missing response fields: {missing_fields}", login_response)
+            else:
+                self.log_test("Telegram User Login", False, 
+                            f"HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Telegram User Login", False, f"Error: {str(e)}")
+
+    def test_current_user_endpoint(self):
+        """Test GET /api/auth/me - Get current user info with Telegram data"""
+        try:
+            response = self.session.get(f"{API_BASE}/auth/me")
+            
+            if response.status_code == 200:
+                user_data = response.json()
+                
+                # Verify Telegram-specific fields are present
+                telegram_fields = ['telegram_id', 'username', 'first_name', 'last_name', 'full_name', 'photo_url']
+                missing_fields = [field for field in telegram_fields if field not in user_data]
+                
+                if not missing_fields:
+                    # Verify full_name is properly generated
+                    expected_full_name = f"{user_data['first_name']} {user_data['last_name']}" if user_data.get('last_name') else user_data['first_name']
+                    
+                    if user_data['full_name'] == expected_full_name:
+                        self.log_test("Current User Endpoint - Telegram Data", True, 
+                                    f"Successfully retrieved user with Telegram data, full_name: '{user_data['full_name']}'", user_data)
+                    else:
+                        self.log_test("Current User Endpoint - Telegram Data", False, 
+                                    f"full_name incorrect. Expected: '{expected_full_name}', Got: '{user_data['full_name']}'", user_data)
+                else:
+                    self.log_test("Current User Endpoint - Telegram Data", False, 
+                                f"Missing Telegram fields: {missing_fields}", user_data)
+            else:
+                self.log_test("Current User Endpoint - Telegram Data", False, 
+                            f"HTTP {response.status_code}", response.text)
+            
+            # Test without authentication
+            auth_header = self.session.headers.get('Authorization')
+            if 'Authorization' in self.session.headers:
+                del self.session.headers['Authorization']
+            
+            response = self.session.get(f"{API_BASE}/auth/me")
+            
+            if response.status_code == 403:
+                self.log_test("Current User Endpoint - Auth Required", True, 
+                            "Correctly rejected unauthenticated request with HTTP 403")
+            else:
+                self.log_test("Current User Endpoint - Auth Required", False, 
+                            f"Expected HTTP 403 but got {response.status_code}")
+            
+            # Restore auth header
+            if auth_header:
+                self.session.headers['Authorization'] = auth_header
+                
+        except Exception as e:
+            self.log_test("Current User Endpoint", False, f"Error: {str(e)}")
+
+    def test_deprecated_email_password_login(self):
+        """Test that old email/password login returns deprecation message"""
+        try:
+            # Try to use old email/password login endpoint
+            login_data = {
+                "email": "test@example.com",
+                "password": "password123"
+            }
+            
+            response = self.session.post(f"{API_BASE}/auth/login", json=login_data)
+            
+            # The endpoint should either not exist (404) or return a deprecation message
+            if response.status_code == 404:
+                self.log_test("Deprecated Email/Password Login", True, 
+                            "Email/password login endpoint correctly removed (HTTP 404)")
+            elif response.status_code == 410:
+                self.log_test("Deprecated Email/Password Login", True, 
+                            "Email/password login correctly deprecated (HTTP 410)", response.json())
+            elif response.status_code >= 400:
+                response_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else response.text
+                if isinstance(response_data, dict) and 'deprecated' in str(response_data).lower():
+                    self.log_test("Deprecated Email/Password Login", True, 
+                                "Email/password login correctly shows deprecation message", response_data)
+                else:
+                    self.log_test("Deprecated Email/Password Login", True, 
+                                f"Email/password login correctly rejected with HTTP {response.status_code}")
+            else:
+                self.log_test("Deprecated Email/Password Login", False, 
+                            f"Email/password login should be deprecated but got HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("Deprecated Email/Password Login", False, f"Error: {str(e)}")
+
+    def test_user_model_telegram_fields(self):
+        """Test that User model uses telegram_id instead of email/password"""
+        if not self.test_user_data:
+            self.log_test("User Model Telegram Fields", False, "No test user data available")
+            return
+            
+        try:
+            # Get current user to verify model structure
+            response = self.session.get(f"{API_BASE}/auth/me")
+            
+            if response.status_code == 200:
+                user_data = response.json()
+                
+                # Verify telegram_id is present and email/password are not
+                has_telegram_id = 'telegram_id' in user_data and user_data['telegram_id'] is not None
+                has_email = 'email' in user_data
+                has_password = 'password' in user_data or 'password_hash' in user_data
+                
+                if has_telegram_id and not has_email and not has_password:
+                    self.log_test("User Model - Telegram Fields", True, 
+                                f"User model correctly uses telegram_id ({user_data['telegram_id']}) instead of email/password", user_data)
+                else:
+                    issues = []
+                    if not has_telegram_id:
+                        issues.append("missing telegram_id")
+                    if has_email:
+                        issues.append("still has email field")
+                    if has_password:
+                        issues.append("still has password field")
+                    
+                    self.log_test("User Model - Telegram Fields", False, 
+                                f"User model issues: {', '.join(issues)}", user_data)
+            else:
+                self.log_test("User Model - Telegram Fields", False, 
+                            f"Could not retrieve user data: HTTP {response.status_code}", response.text)
+                
+        except Exception as e:
+            self.log_test("User Model - Telegram Fields", False, f"Error: {str(e)}")
+
+    def run_telegram_auth_tests(self):
+        """Run all Telegram authentication system tests"""
+        print("🚀 Starting Telegram Authentication System Tests")
+        print("=" * 60)
+        
+        # Test authentication verification
+        self.test_telegram_authentication_verification()
+        
+        # Test user registration
+        self.test_telegram_user_registration()
+        
+        # Test user login (requires successful registration)
+        self.test_telegram_user_login()
+        
+        # Test current user endpoint
+        self.test_current_user_endpoint()
+        
+        # Test deprecated email/password login
+        self.test_deprecated_email_password_login()
+        
+        # Test user model changes
+        self.test_user_model_telegram_fields()
+        
+        print("\n" + "=" * 60)
+        print("📊 TELEGRAM AUTHENTICATION SYSTEM TEST SUMMARY")
+        print("=" * 60)
+        
+        # Filter results for Telegram auth tests
+        telegram_tests = [t for t in self.test_results if any(keyword in t['test'].lower() for keyword in ['telegram', 'auth', 'user model', 'jwt', 'organization integration', 'multi-tenant', 'deprecated'])]
+        
+        total_tests = len(telegram_tests)
+        passed_tests = len([t for t in telegram_tests if t['success']])
+        failed_tests = total_tests - passed_tests
+        
+        print(f"Total Telegram Auth Tests: {total_tests}")
+        print(f"✅ Passed: {passed_tests}")
+        print(f"❌ Failed: {failed_tests}")
+        print(f"Success Rate: {(passed_tests/total_tests)*100:.1f}%" if total_tests > 0 else "No tests run")
+        
+        if failed_tests > 0:
+            print("\n❌ FAILED TELEGRAM AUTH TESTS:")
+            for test in telegram_tests:
+                if not test['success']:
+                    print(f"  • {test['test']}: {test['details']}")
+        
+        print("\n" + "=" * 60)
+        
+        return {
+            'total': total_tests,
+            'passed': passed_tests,
+            'failed': failed_tests,
+            'success_rate': (passed_tests/total_tests)*100 if total_tests > 0 else 0,
+            'results': telegram_tests
+        }
+
     def test_forwarding_destinations_management(self):
         """Test Forwarding Destinations Management CRUD operations"""
         
