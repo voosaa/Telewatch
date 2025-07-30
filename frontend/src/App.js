@@ -2163,6 +2163,12 @@ const MainApp = () => {
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard user={user} />;
+      case 'accounts':
+        return (
+          <ProtectedRoute requiredRoles={['owner', 'admin']}>
+            <AccountManager />
+          </ProtectedRoute>
+        );
       case 'groups':
         return (
           <ProtectedRoute requiredRoles={['owner', 'admin', 'viewer']}>
