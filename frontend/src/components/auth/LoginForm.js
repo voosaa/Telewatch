@@ -70,14 +70,16 @@ const TelegramLogin = ({ onSwitchToRegister }) => {
     };
   }, []);
 
-  // Create the Telegram widget
+  // Create the Telegram widget using React 19 compatible approach
   const createTelegramWidget = () => {
     if (!widgetRef.current || widgetLoaded) return;
 
     try {
-      // Clear any existing content
-      widgetRef.current.innerHTML = '';
-
+      // Use a more React 19 compatible approach
+      // Create a separate container that React won't manage
+      const widgetContainer = document.createElement('div');
+      widgetContainer.className = 'telegram-widget-container';
+      
       // Create the Telegram login widget script element
       const widget = document.createElement('script');
       widget.setAttribute('src', 'https://telegram.org/js/telegram-widget.js?22');
@@ -86,7 +88,12 @@ const TelegramLogin = ({ onSwitchToRegister }) => {
       widget.setAttribute('data-onauth', 'onTelegramAuth(user)');
       widget.setAttribute('data-request-access', 'write');
       
-      widgetRef.current.appendChild(widget);
+      // Append script to the isolated container
+      widgetContainer.appendChild(widget);
+      
+      // Now append the container to React ref (React won't manage the inner contents)
+      widgetRef.current.appendChild(widgetContainer);
+      
       setWidgetLoaded(true);
       
     } catch (err) {
@@ -96,11 +103,15 @@ const TelegramLogin = ({ onSwitchToRegister }) => {
     }
   };
 
-  // Fallback iframe approach
+  // Fallback iframe approach with proper React 19 handling
   const createTelegramWidgetIframe = () => {
     if (!widgetRef.current || widgetLoaded) return;
 
     try {
+      // Create isolated container for iframe
+      const iframeContainer = document.createElement('div');
+      iframeContainer.className = 'telegram-iframe-container';
+      
       const widget = document.createElement('iframe');
       widget.src = `https://oauth.telegram.org/auth?bot_id=8342094196&origin=${encodeURIComponent(window.location.origin)}&return_to=${encodeURIComponent(window.location.origin)}&embed=1&request_access=write`;
       widget.width = '100%';
@@ -125,7 +136,13 @@ const TelegramLogin = ({ onSwitchToRegister }) => {
       
       window.addEventListener('message', handleMessage);
       
-      widgetRef.current.appendChild(widget);
+      // Store cleanup function for later
+      widgetRef.current._telegramCleanup = () => {
+        window.removeEventListener('message', handleMessage);
+      };
+      
+      iframeContainer.appendChild(widget);
+      widgetRef.current.appendChild(iframeContainer);
       setWidgetLoaded(true);
       
     } catch (err) {
