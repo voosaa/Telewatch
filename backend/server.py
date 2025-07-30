@@ -791,7 +791,7 @@ Use the web dashboard for detailed search\\.
                 """
             
             keyboard = [
-                [InlineKeyboardButton("🌐 Open Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
                 [InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]
             ]
             
@@ -820,7 +820,7 @@ Contact support for issues or questions\\.
             """
             
             keyboard = [
-                [InlineKeyboardButton("🌐 Open Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
                 [InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]
             ]
             
@@ -857,7 +857,7 @@ For full management capabilities, use the web dashboard\\. You can add/remove gr
             """
             
             keyboard = [
-                [InlineKeyboardButton("🌐 Open Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
                 [InlineKeyboardButton("🔙 Back to Main", callback_data="main_menu")]
             ]
             
@@ -927,7 +927,7 @@ For adding/removing groups and users, please use the web dashboard where you hav
             """
             
             keyboard = [
-                [InlineKeyboardButton("🌐 Open Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
                 [InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_menu")]
             ]
             
@@ -1597,7 +1597,7 @@ async def stop_bot_polling():
 @api_router.post("/telegram/set-webhook")
 async def set_webhook():
     """Set webhook for production mode"""
-    webhook_url = f"https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com/api/telegram/webhook/{os.environ.get('WEBHOOK_SECRET')}"
+    webhook_url = f"https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com/api/telegram/webhook/{os.environ.get('WEBHOOK_SECRET')}"
     
     try:
         # Stop polling if running
@@ -3393,7 +3393,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             welcome_msg += "📱 **Bot Commands:** Use /help for available commands"
             
             keyboard = [
-                [InlineKeyboardButton("🌐 Web Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Web Dashboard", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
                 [InlineKeyboardButton("❓ Help", callback_data="help")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -3425,7 +3425,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         help_msg += "For full features, use our web interface with Telegram authentication."
         
         keyboard = [
-            [InlineKeyboardButton("🌐 Open Web Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+            [InlineKeyboardButton("🌐 Open Web Dashboard", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
             [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -3517,7 +3517,7 @@ async def accounts_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += "3. Activate accounts for monitoring"
             
             keyboard = [
-                [InlineKeyboardButton("🌐 Web Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Web Dashboard", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
                 [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -3541,7 +3541,7 @@ async def accounts_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += "Use web dashboard for full account management."
             
             keyboard = [
-                [InlineKeyboardButton("🌐 Manage Accounts", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Manage Accounts", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
                 [InlineKeyboardButton("🔄 Refresh", callback_data="accounts"),
                  InlineKeyboardButton("🏠 Menu", callback_data="main_menu")]
             ]
@@ -3593,7 +3593,7 @@ async def groups_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 msg += f"... and {len(groups) - 5} more groups\n\n"
         
         keyboard = [
-            [InlineKeyboardButton("🌐 Manage Groups", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+            [InlineKeyboardButton("🌐 Manage Groups", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
             [InlineKeyboardButton("🔍 Discover Groups", callback_data="discover_groups")],
             [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
         ]
@@ -3634,7 +3634,7 @@ async def analytics_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg += f"👥 **Monitored Groups:** {dashboard_stats['monitored_groups']}\n"
         
         keyboard = [
-            [InlineKeyboardButton("🌐 Detailed Analytics", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+            [InlineKeyboardButton("🌐 Detailed Analytics", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
             [InlineKeyboardButton("🔄 Refresh", callback_data="analytics"),
              InlineKeyboardButton("🏠 Menu", callback_data="main_menu")]
         ]
@@ -3667,7 +3667,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif callback_data == "dashboard":
             msg = "📊 **Dashboard**\n\nFor the complete dashboard with real-time data, charts, and detailed analytics, please use the web interface."
             keyboard = [
-                [InlineKeyboardButton("🌐 Open Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Open Dashboard", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
                 [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -3705,7 +3705,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 msg = "❌ User not found. Please use /start first."
             
             keyboard = [
-                [InlineKeyboardButton("🌐 View Groups", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 View Groups", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
                 [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -3714,7 +3714,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Handle other callbacks
             msg = f"🔧 **{callback_data.title()}**\n\nThis feature requires the web dashboard for full functionality."
             keyboard = [
-                [InlineKeyboardButton("🌐 Open Web Dashboard", url="https://70a40acc-d77d-4dde-95db-2991761c0e87.preview.emergentagent.com")],
+                [InlineKeyboardButton("🌐 Open Web Dashboard", url="https://763383c1-6086-4244-aa7d-b55ea6e1d91b.preview.emergentagent.com")],
                 [InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
