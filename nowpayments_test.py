@@ -540,7 +540,10 @@ if __name__ == "__main__":
     tester = NOWPaymentsTester()
     summary = tester.run_all_tests()
     
-    print(f"\n🎯 Final Result: {summary['passed']}/{summary['total']} tests passed ({summary['success_rate']:.1f}%)")
-    
-    # Exit with appropriate code
-    exit(0 if summary['failed'] == 0 else 1)
+    if summary:
+        print(f"\n🎯 Final Result: {summary['passed']}/{summary['total']} tests passed ({summary['success_rate']:.1f}%)")
+        # Exit with appropriate code
+        exit(0 if summary['failed'] == 0 else 1)
+    else:
+        print("❌ Test execution failed")
+        exit(1)
