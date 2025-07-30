@@ -2149,21 +2149,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize the application"""
-    logger.info("Starting Telegram Monitor Bot API")
-    
-    # Run database migrations for multi-tenancy
-    await migrate_database_for_multitenancy()
-    
-    # Test bot connection
-    try:
-        bot_info = await bot.get_me()
-        logger.info(f"Bot connected: @{bot_info.username}")
-    except Exception as e:
-        logger.error(f"Failed to connect to Telegram bot: {e}")
-
 async def migrate_database_for_multitenancy():
     """Migrate existing data to support multi-tenancy"""
     logger.info("Running multi-tenancy database migration...")
