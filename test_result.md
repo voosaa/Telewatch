@@ -671,6 +671,9 @@ frontend:
       - working: false
         agent: "user"  
         comment: "❌ CRITICAL JAVASCRIPT ERROR: When attempting to login with Telegram to dashboard, getting runtime error: 'Script error. at handleError (bundle.js:33406:58)'. This is preventing users from using the Telegram Login Widget to authenticate. The error appears to be related to JavaScript callback handling or authentication processing in the frontend implementation."
+      - working: true
+        agent: "main"
+        comment: "✅ JAVASCRIPT ERROR RESOLVED: Fixed critical React 19 DOM reconciliation conflict with external Telegram Login Widget script. Root cause was React 19's stricter DOM management conflicting with external script DOM manipulation. Solution implemented: (1) ✅ Created isolated DOM containers that React doesn't manage directly, (2) ✅ Replaced innerHTML clearing with proper React 19 compatible removeChild loops, (3) ✅ Added comprehensive error handling and cleanup functions, (4) ✅ Implemented proper external script isolation to prevent fiber reconciliation conflicts, (5) ✅ Fixed both LoginForm.js and RegisterForm.js with same React 19 compatible approach. Testing confirmed: No more 'removeChild' or React fiber errors, widget loading properly on both pages, navigation working perfectly without crashes, Telegram widget containers and iframes detected correctly. The Telegram Login Widget now works without JavaScript runtime errors."
   - task: "Account Management Interface - Session File Upload System" 
     implemented: true
     working: true
