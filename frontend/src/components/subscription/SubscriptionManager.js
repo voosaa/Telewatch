@@ -75,6 +75,7 @@ const SubscriptionManager = () => {
   useEffect(() => {
     fetchOrganizationData();
     fetchPaymentHistory();
+    fetchSupportedCurrencies();
   }, []);
 
   const fetchOrganizationData = async () => {
@@ -92,6 +93,30 @@ const SubscriptionManager = () => {
       setError('Failed to load organization data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSupportedCurrencies = async () => {
+    try {
+      const response = await axios.get(
+        `${process.env.REACT_APP_BACKEND_URL}/api/crypto/currencies`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      );
+      setSupportedCurrencies(response.data.currencies || []);
+    } catch (err) {
+      console.log('Failed to load supported currencies');
+      // Set default currencies as fallback
+      setSupportedCurrencies([
+        { currency: 'btc', name: 'Bitcoin', network: 'BTC' },
+        { currency: 'eth', name: 'Ethereum', network: 'ETH' },
+        { currency: 'usdt', name: 'Tether', network: 'ETH' },
+        { currency: 'usdc', name: 'USD Coin', network: 'ETH' },
+        { currency: 'sol', name: 'Solana', network: 'SOL' }
+      ]);
     }
   };
 
