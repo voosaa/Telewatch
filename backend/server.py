@@ -4021,6 +4021,13 @@ async def startup_event():
     try:
         bot_info = await bot.get_me()
         logger.info(f"Bot connected: @{bot_info.username}")
+        
+        # Setup bot command handlers
+        handler_success = await setup_bot_handlers()
+        if handler_success:
+            logger.info("✅ Telegram bot command handlers initialized")
+        else:
+            logger.error("❌ Failed to initialize bot command handlers")
     except Exception as e:
         logger.error(f"Bot connection failed: {e}")
     
