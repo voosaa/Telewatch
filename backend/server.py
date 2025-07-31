@@ -70,7 +70,28 @@ polling_task = None
 last_update_id = 0
 
 # Create the main app
-app = FastAPI()
+app = FastAPI(
+    title="Telegram Monitor API",
+    description="Multi-Account Session Monitoring System",
+    version="1.0.0"
+)
+
+# Add CORS middleware for production
+from fastapi.middleware.cors import CORSMiddleware
+
+# Configure CORS for production deployment
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",  # Local development
+        "https://*.vercel.app",   # Vercel deployments
+        "https://*.railway.app",  # Railway deployments
+        "*"  # Allow all origins for now (restrict in production)
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
