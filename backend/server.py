@@ -43,8 +43,8 @@ mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create upload directories for accounts
-UPLOAD_DIR = Path("/app/uploads")
+# Create upload directories for accounts (Railway compatible)
+UPLOAD_DIR = Path("./uploads")  # Relative path for Railway
 SESSIONS_DIR = UPLOAD_DIR / "sessions"
 JSON_DIR = UPLOAD_DIR / "json"
 
